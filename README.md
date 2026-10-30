@@ -1,11 +1,22 @@
 [![GPL v3](https://img.shields.io/badge/license-GPL_v3-green.svg)](http://www.gnu.org/licenses/gpl-3.0.txt)
-[![MELPA](https://melpa.org/packages/code-review-badge.svg)](https://melpa.org/#/code-review)
-![Tests](https://github.com/wandersoncferreira/code-review/actions/workflows/ci.yml/badge.svg)
 
 # Code Review
 
 Package to help you perform code reviews from your VC provider. Currently
-supports Github and basic Gitlab and Bitbucket workflows.
+supports Github and basic Gitlab workflows.
+
+> **This is a fork** of
+> [wandersoncferreira/code-review](https://github.com/wandersoncferreira/code-review),
+> which is unmaintained since December 2022 and no longer loads with current
+> versions of its dependencies. The `port` branch:
+>
+> - ports the database layer to current EmacSQL and closql, and the Gitlab
+>   requests to current Ghub (which dropped `glab-get` and friends);
+> - removes Bitbucket support;
+> - fixes Gitlab replies, approval and review feedback against current Gitlab.
+>
+> Only Gitlab has been tested since the port, on a self-hosted instance.
+> Github compiles but is untested.
 
 ![Demo of code review package](./docs/code_review_demo.png)
 
@@ -22,7 +33,8 @@ The Emacs everywhere goal continues. These are the main features of
 - Reply to comments
 - Include code suggestions
 - View `outdated` comments with the right diff hunk context
-- Approve, Reject or Request Changes for your PRs
+- Approve, Reject or Request Changes for your PRs (Gitlab: approve and
+  comment only)
 - Integrated with `forge-topic-view` via `code-review-forge-pr-at-point`
 - Fast track commands like "LGTM! Approved"
 - Review using single commits to focus on diff
@@ -47,7 +59,8 @@ The basic workflow:
 - `RET` on a previous sent comment to include a reply
 - `C-c C-k` on a local comment to remove it
 - `r s f` to enable transient and Set a feedback
-- `r a` to approve the PR | `r r` to reject the PR | `r c` to add comments in the PR
+- `r a` to approve the PR | `r r` to reject the PR (Github only) | `r c` to add
+  comments in the PR
 
 You can include your own bindings to functions like
 `code-review-set-feedback`, `code-review-submit-approve`,
@@ -60,11 +73,20 @@ Missing something? Please, [let us know](https://github.com/wandersoncferreira/c
 
 # Installation
 
-I highly recommend installing `code-review` through `package.el`.
+Do not install `code-review` from MELPA: that is the unported upstream version.
+Install this fork's `port` branch with `package-vc`, which also installs the
+dependencies from the archives (MELPA must be in `package-archives`):
 
-It's available on `MELPA`.
+``` emacs-lisp
+(package-vc-install
+ '(code-review :url "https://github.com/ilitzroth/code-review" :branch "port"))
+```
 
-`M-x package-install code-review`
+Or, from a local clone:
+
+``` emacs-lisp
+(package-vc-install-from-checkout "~/path/to/code-review" "code-review")
+```
 
 Then you can either `M-x code-review-start` and provide a PR URL or `M-x
 code-review-forge-pr-at-point` if you are in a forge buffer over a PR.
@@ -99,13 +121,17 @@ Change the destination where binary files is downloaded.
 ```
 
 
-#### Experimental
+#### Reuse Forge's tokens
 
-Use passwords configured for forge. The default is `'code-review`.
+If you use Forge, reuse the tokens configured for it instead of adding separate
+`^code-review` entries to your auth source. The default is `'code-review`.
 
 ``` emacs-lisp
 (setq code-review-auth-login-marker 'forge)
 ```
+
+For Gitlab this also finds tokens stored under the REST endpoint
+(`HOST/api/v4`), which is where Forge keeps them.
 
 #### Doom Emacs users
 
@@ -135,7 +161,6 @@ for the setup and configuration.
 
 - [Github](./docs/github.md)
 - [Gitlab](./docs/gitlab.md)
-- [Bitbucket](./docs/bitbucket.md)
 
 # Keybindings
 

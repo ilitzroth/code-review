@@ -2,28 +2,43 @@
 
 ## Auth
 
-If you have trouble with the authinfo process below there is this nice
-[Tweet](https://twitter.com/iLemming/status/1463599279457673220) from @agzam
-explaining a bit the setup!
+If you use Forge, reuse its token and skip the rest of this section:
+
+``` emacs-lisp
+(setq code-review-auth-login-marker 'forge)
+```
+
+Otherwise:
 
 1. [Create a personal access token using Gitlab](https://docs.gitlab.com/ee/user/profile/personal_access_tokens.html)
 2. Choose the `api` scope
+3. Add a line to your auth source file, usually `~/.authinfo.gpg`, with your
+   login and token:
 
-For enterprise users do not forget to change the value of
-`code-review-gitlab-host` and `code-review-gitlab-graphql-host` to match the
-ones of your private instance. The current recommended way to use the package
-with enterprise solution is through `code-review-forge-pr-at-point` we have a
-bug identifying enterprise URLs in `code-review-start` yet.
-
-Add a line to your auth source file, usually `~/.authinfo.gpg`, with your login
-and token:
-
-``` emacs-lisp
+```
 machine gitlab.com/api login yourlogin^code-review password MYTOKENGOESHERE
 ```
 
+The token is also found when the line names the REST endpoint instead
+(`gitlab.com/api/v4`), which is where Forge stores its tokens.
+
+## Self-hosted instances
+
+Point these three options at your instance, e.g. for `git.example.com`:
+
+``` emacs-lisp
+(setq code-review-gitlab-base-url "git.example.com"          ; MR URLs
+      code-review-gitlab-host "git.example.com/api"          ; REST
+      code-review-gitlab-graphql-host "git.example.com/api") ; GraphQL
+```
+
+With these set, both `code-review-start` with an MR URL (including projects in
+nested groups) and `code-review-forge-pr-at-point` work.
 
 ## Approve Merge Request
+
+`r a` approves the merge request.  Gitlab's approve API takes no message, so
+feedback set with `r s f` is posted as a separate comment next to the approval.
 
 Gitlab's repository can require a password from users before approving a Merge
 Request (see details
@@ -31,4 +46,6 @@ Request (see details
 and if this is enabled you will be prompted to type your username and password
 again.
 
+## Not supported
 
+Requesting changes (`r r`) is not supported for Gitlab.
