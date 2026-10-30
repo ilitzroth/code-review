@@ -1,4 +1,4 @@
-;;; code-review.el --- Perform code review from Github, Gitlab, and Bitbucket Cloud -*- lexical-binding: t; -*-
+;;; code-review.el --- Perform code review from Github and Gitlab -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2021 Wanderson Ferreira
 ;;
@@ -28,7 +28,7 @@
 ;;; Commentary:
 ;;
 ;; Review Pull Request in Emacs using a modern interface based on Magit Section
-;; and Transient.  Currently supports Github, Gitlab, and Bitbucket Cloud.
+;; and Transient.  Currently supports Github and Gitlab.
 ;;
 
 ;;; Code:
@@ -90,11 +90,11 @@
 
 (defcustom code-review-auth-login-marker
   'code-review
-  "Symbol for looking up the github, gitlab and bitbucket login
+  "Symbol for looking up the github and gitlab login
 data in auth-sources (e.g. ~/.authinfo.gpg). By default, it is
-set to 'code-review, but if you have already configured the
+set to `code-review', but if you have already configured the
 logins for magit forge, you can use these by setting this option
-to 'forge."
+to `forge'."
   :group 'code-review
   :type 'symbol)
 

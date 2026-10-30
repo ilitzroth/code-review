@@ -30,7 +30,6 @@
 
 (require 'code-review-comment)
 (require 'code-review-db)
-(require 'code-review-bitbucket)
 (require 'code-review-gitlab)
 (require 'code-review-github)
 (require 'let-alist)
@@ -110,16 +109,12 @@ If you want only to submit replies, use ONLY-REPLY? as non-nil."
                       ((code-review-github-repo-p pr)
                        (code-review-submit-github-review))
                       ((code-review-gitlab-repo-p pr)
-                       (code-review-submit-gitlab-review))
-                      ((code-review-bitbucket-repo-p pr)
-                       (code-review-submit-bitbucket-review))))
+                       (code-review-submit-gitlab-review))))
          (replies-obj (cond
                        ((code-review-github-repo-p pr)
                         (code-review-submit-github-replies))
                        ((code-review-gitlab-repo-p pr)
-                        (code-review-submit-gitlab-replies))
-                       ((code-review-bitbucket-repo-p pr)
-                        (code-review-submit-bitbucket-replies)))))
+                        (code-review-submit-gitlab-replies)))))
 
     (oset review-obj state event)
     (oset review-obj pr pr)
@@ -402,9 +397,7 @@ Optionally set a FEEDBACK message."
             (switch-to-buffer-other-window buffer)
             (code-review-comment-mode)))
       (message "Not supported in %s yet."
-               (cond
-                ((code-review-bitbucket-repo-p pr)
-                 "Bitbucket"))))))
+               (eieio-object-class-name pr)))))
 
 (defun code-review--labels-to-send (pr choices)
   "The PR has a list of CHOICES for labels that should be send.
@@ -424,7 +417,7 @@ This function will make sure we clean the list of labels and/or disable all of t
 Rewrite all current labels with the options chosen here."
   (interactive)
   (let ((pr (code-review-db-get-pullreq)))
-    (when-let (options (code-review-get-labels pr))
+    (when-let* ((options (code-review-get-labels pr)))
       (let* ((choices (completing-read-multiple "Choose: " (append
                                                             options
                                                             (list "<clean all labels>"))))
@@ -444,7 +437,7 @@ If a valid ASSIGNEE is provided, use that instead."
   (let ((candidate nil))
     (if assignee
         (setq candidate assignee)
-      (when-let (options (code-review-get-assignees obj))
+      (when-let* ((options (code-review-get-assignees obj)))
         (let* ((choice (completing-read "Choose: " options)))
           (setq candidate choice))))
     (oset obj assignees (list `((name) (login . ,candidate))))
@@ -474,7 +467,7 @@ If a valid ASSIGNEE is provided, use that instead."
   (let ((pr (code-review-db-get-pullreq)))
     (if (code-review-github-repo-p pr)
         (progn
-          (if-let (options (code-review-get-milestones pr))
+          (if-let* ((options (code-review-get-milestones pr)))
               (let* ((choice (completing-read "Choose: " (a-keys options)))
                      (milestone `((title . ,choice)
                                   (perc . 0)
@@ -490,9 +483,7 @@ If a valid ASSIGNEE is provided, use that instead."
       (message "Not supported in %s yet."
                (cond
                 ((code-review-gitlab-repo-p pr)
-                 "Gitlab")
-                ((code-review-bitbucket-repo-p pr)
-                 "Bitbucket"))))))
+                 "Gitlab"))))))
 
 ;;;###autoload
 (defun code-review-set-description ()
@@ -620,9 +611,7 @@ If a valid ASSIGNEE is provided, use that instead."
       (message "Not supported in %s yet."
                (cond
                 ((code-review-gitlab-repo-p pr)
-                 "Gitlab")
-                ((code-review-bitbucket-repo-p pr)
-                 "Bitbucket"))))))
+                 "Gitlab"))))))
 
 ;;;###autoload
 (defun code-review-toggle-display-all-comments ()
@@ -668,9 +657,7 @@ If a valid ASSIGNEE is provided, use that instead."
       (message "Not supported in %s yet."
                (cond
                 ((code-review-gitlab-repo-p pr)
-                 "Gitlab")
-                ((code-review-bitbucket-repo-p pr)
-                 "Bitbucket"))))))
+                 "Gitlab"))))))
 
 ;;;###autoload
 (defun code-review-comment-jump-next ()

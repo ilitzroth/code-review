@@ -46,11 +46,6 @@
   :type 'string
   :group 'code-review-gitlab)
 
-(defcustom code-review-bitbucket-base-url "bitbucket.org"
-  "Host used to identify PR URLs from Bitbucket."
-  :type 'string
-  :group 'code-review-bitbucket)
-
 (defcustom code-review-download-dir "/tmp/code-review/"
   "Directory where code review will download binary files."
   :type 'string
@@ -77,7 +72,7 @@
   "Update how many comment lines was written for a given PATH.
 COUNT-COMMENTS keep track of this value and compute line numbers
 using COMMENTS."
-  (if-let (count (alist-get path count-comments nil nil 'equal))
+  (if-let* ((count (alist-get path count-comments nil nil 'equal)))
       (a-assoc count-comments path (+ count amount-loc-incr))
     (a-assoc count-comments path amount-loc-incr)))
 
@@ -151,7 +146,7 @@ using COMMENTS."
    (lambda (acc node)
      (let ((author (a-get-in node (list 'author 'login)))
            (state (a-get node 'state)))
-       (if-let (comments (a-get-in node (list 'comments 'nodes)))
+       (if-let* ((comments (a-get-in node (list 'comments 'nodes))))
            (-reduce-from
             (lambda (grouped-comments comment)
               (let-alist comment
@@ -258,8 +253,7 @@ using COMMENTS."
   "Extract a pr alist from a pull request URL."
   (let* ((http-or-https (lambda (url) (if (member url ghub-insecure-hosts) "http://%s" "https://%s")))
 	 (gitlab-http (funcall http-or-https code-review-gitlab-base-url))
-	 (github-http (funcall http-or-https code-review-github-base-url))
-	 (bitbucket-http (funcall http-or-https code-review-bitbucket-base-url)))
+	 (github-http (funcall http-or-https code-review-github-base-url)))
     (cond
      ((string-prefix-p (format gitlab-http code-review-gitlab-base-url) url)
       (save-match-data
@@ -280,16 +274,6 @@ using COMMENTS."
                       'repo  (match-string 2 url)
                       'owner (match-string 1 url)
                       'forge 'github
-                      'url url))))
-     ((string-prefix-p (format bitbucket-http code-review-bitbucket-base-url) url)
-      (save-match-data
-	(and (string-match (format (concat bitbucket-http "/\\(.*\\)/\\(.*\\)/pull-requests/\\([0-9]+\\)")
-                                   code-review-bitbucket-base-url)
-                           url)
-             (a-alist 'num   (match-string 3 url)
-                      'repo  (match-string 2 url)
-                      'owner (match-string 1 url)
-                      'forge 'bitbucket
                       'url url)))))))
 
 (defun code-review-utils-build-obj (pr-alist)
@@ -306,11 +290,6 @@ using COMMENTS."
        (code-review-gitlab-repo :owner .owner
                                 :repo .repo
                                 :number .num)))
-     ((equal .forge 'bitbucket)
-      (code-review-db--pullreq-create
-       (code-review-bitbucket-repo :owner .owner
-                                   :repo .repo
-                                   :number .num)))
      (t
       (error "Forge not supported")))))
 
@@ -327,7 +306,7 @@ using COMMENTS."
 ;; Borrowed from `forge-topic.el' -- Handling label overlay colors
 (defun code-review-utils--sanitize-color (color)
   "Sanitize COLOR."
-  (cond ((x-color-values color) color)
+  (cond ((color-values color) color)
         ;; Discard alpha information.
         ((string-match-p "\\`#.\\{4\\}\\'" color) (substring color 0 3))
         ((string-match-p "\\`#.\\{8\\}\\'" color) (substring color 0 6))
@@ -341,7 +320,7 @@ using COMMENTS."
 (defun code-review-utils--x-color-luminance (color)
   "Calculate the luminance of a COLOR string (e.g. \"#ffaa00\", \"blue\").
 Return a value between 0 and 1."
-  (let ((values (x-color-values color)))
+  (let ((values (color-values color)))
     (code-review-utils--color-luminance (/ (nth 0 values) 256.0)
                             (/ (nth 1 values) 256.0)
                             (/ (nth 2 values) 256.0))))

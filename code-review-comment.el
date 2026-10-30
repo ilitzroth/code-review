@@ -37,7 +37,7 @@
   :group 'code-review
   :type 'string)
 
-(defcustom code-review-comment-buffer-msg ";;; Type C-c C-c to include your comment locally\n;;; After that check the transient menu (press r) to see possible actions"
+(defcustom code-review-comment-buffer-msg ";;; Type C-c C-c to include your comment locally, C-c C-k to cancel\n;;; After that check the transient menu (press r) to see possible actions"
   "Helper text on top of comment buffer."
   :group 'code-review
   :type 'string)
@@ -47,7 +47,7 @@
   :group 'code-review
   :type 'string)
 
-(defcustom code-review-comment-single-comment-msg ";;; Equivalent to add a simple comment to the PR without a review."
+(defcustom code-review-comment-single-comment-msg ";;; Equivalent to add a simple comment to the PR without a review.\n;;; Type C-c C-c to send it now, C-c C-k to cancel"
   "Default text to single comment section e.g. conversation."
   :group 'code-review
   :type 'string)
@@ -324,7 +324,7 @@ Inform if a SUGGESTION-CODE? is being proposed."
   (save-match-data
     (let ((text (oref obj buffer-text))
           (regex (rx "Title:"
-                     (group-n 1 (* any) "\n")
+                     (group-n 1 (* nonl) "\n")
                      (one-or-more "\n")
                      "Body:"
                      (group-n 2 (zero-or-more anything))))
@@ -356,10 +356,7 @@ Inform if a SUGGESTION-CODE? is being proposed."
                                 (buffer-substring-no-properties (point-min) (point-max))))))
              (pr (code-review-db-get-pullreq)))
 
-        (kill-buffer (current-buffer))
-        (if (= 1 (length (window-list (window-frame (selected-window)))))
-            (delete-frame (window-frame (selected-window)))
-          (delete-window (selected-window)))
+        (code-review-comment--close buffer)
 
         (cond
 
@@ -444,14 +441,22 @@ Inform if a SUGGESTION-CODE? is being proposed."
                 nil 'require-match)))
     (insert "@" user " ")))
 
+;; The comment buffer is shown with `switch-to-buffer-other-window', which
+;; can reuse an existing window.  Deleting that window on close, as was done,
+;; destroyed the user's window layout; `quit-window' instead shows the
+;; window's previous buffer again, and only deletes a window that was made
+;; for the comment buffer.
+(defun code-review-comment--close (buffer)
+  "Kill comment BUFFER and restore the window it was shown in."
+  (if-let* ((window (get-buffer-window buffer)))
+      (quit-window t window)
+    (kill-buffer buffer)))
+
 ;;;###autoload
 (defun code-review-comment-quit ()
   "Quit the comment window."
   (interactive)
-  (kill-buffer (current-buffer))
-  (if (= 1 (length (window-list (window-frame (selected-window)))))
-      (delete-frame (window-frame (selected-window)))
-    (delete-window (selected-window)))
+  (code-review-comment--close (current-buffer))
   (with-current-buffer (get-buffer code-review-buffer-name)
     (goto-char code-review-comment-cursor-pos)
     (code-review-comment-reset-global-vars)))

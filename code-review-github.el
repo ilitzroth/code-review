@@ -29,10 +29,13 @@
 ;;; Code:
 
 (require 'ghub)
+(require 'ghub-legacy)
 (require 'deferred)
 (require 'code-review-interfaces)
 (require 'code-review-db)
 (require 'a)
+
+(defvar code-review-auth-login-marker) ; defined in code-review.el
 
 (defclass code-review-github-repo (code-review-db-pullreq)
   ((callback            :initform nil)))
@@ -798,7 +801,7 @@ Optionally ask for the FALLBACK? query."
      }
    }
  }"))
-    (if-let (users (a-get infos 'assignable-users))
+    (if-let* ((users (a-get infos 'assignable-users)))
         users
       (let ((has-next-page t)
             cursor res)

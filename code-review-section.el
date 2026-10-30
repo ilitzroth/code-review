@@ -41,7 +41,6 @@
 (require 'code-review-interfaces)
 (require 'code-review-github)
 (require 'code-review-gitlab)
-(require 'code-review-bitbucket)
 
 (defcustom code-review-section-indent-width 1
   "Indent width for nested sections."
@@ -106,6 +105,7 @@
   "All available reactions.")
 
 (declare-function code-review-promote-comment-to-new-issue "code-review")
+(declare-function code-review-mode "code-review")
 (declare-function code-review-utils--visit-binary-file-at-remote "code-review-utils")
 (declare-function code-review-utils--visit-binary-file-at-point "code-review-utils")
 
@@ -288,7 +288,7 @@ INDENT count of spaces are added at the start of every line."
 
 (defun code-review-section-insert-title ()
   "Insert the title of the header buffer."
-  (when-let (title (code-review-db--pullreq-title))
+  (when-let* ((title (code-review-db--pullreq-title)))
     (magit-insert-section (code-review-title-section title)
       (insert (format "%-17s" "Title: ") title)
       (insert ?\n))))
@@ -299,7 +299,7 @@ INDENT count of spaces are added at the start of every line."
 
 (defun code-review-section-insert-state ()
   "Insert the state of the header buffer."
-  (when-let (state (code-review-db--pullreq-state))
+  (when-let* ((state (code-review-db--pullreq-state)))
     (let ((value (if state state "none")))
       (magit-insert-section (code-review-state-section value)
         (insert (format "%-17s" "State: ") value)
@@ -707,7 +707,7 @@ INDENT count of spaces are added at the start of every line."
 
 (defun code-review-section-insert-pr-description ()
   "Insert PULL-REQUEST description."
-  (when-let (infos (code-review-db--pullreq-raw-infos))
+  (when-let* ((infos (code-review-db--pullreq-raw-infos)))
     (let-alist infos
       (let* ((is-html? (when .bodyHTML t))
              (is-empty? (and (string-empty-p .bodyHTML)
@@ -864,31 +864,9 @@ INDENT count of spaces are added at the start of every line."
                   (code-review-insert-comment-lines obj)
                   (insert ?\n))))))))))
 
-(cl-defmethod code-review--insert-conversation-section ((bitbucket code-review-bitbucket-repo))
-  (let-alist (oref bitbucket raw-infos)
-    (let ((list-of-comments (--sort
-                             (< (time-to-seconds (date-to-time (a-get it 'createdAt)))
-                                (time-to-seconds (date-to-time (a-get other 'createdAt))))
-                             .comments.nodes)))
-      (dolist (c list-of-comments)
-        (let* ((obj (code-review-comment-section
-                     :author (a-get-in c (list 'author 'login))
-                     :msg (a-get c 'bodyHTML)
-                     :id (a-get c 'databaseId)
-                     :typename (a-get c 'typename))))
-          (magit-insert-section (code-review-comment-section obj)
-            (insert (concat
-                     (propertize (format "@%s" (oref obj author)) 'font-lock-face (oref obj face))
-                     " - "
-                     (propertize (code-review-utils--format-timestamp (a-get c 'createdAt)) 'face 'code-review-timestamp-face)))
-            (magit-insert-heading)
-            (insert ?\n)
-            (code-review-insert-comment-lines obj)
-            (insert ?\n)))))))
-
 (defun code-review-section-insert-top-level-comments ()
   "Insert general comments for the PULL-REQUEST in the buffer."
-  (when-let (pr (code-review-db-get-pullreq))
+  (when-let* ((pr (code-review-db-get-pullreq)))
     (magit-insert-section (code-review-comment-header-section)
       (insert (propertize "Conversation" 'font-lock-face 'magit-section-heading))
       (magit-insert-heading)
@@ -1303,7 +1281,7 @@ Optionally DELETE? flag must be set if you want to remove it."
         (code-review--insert-html
          (oref obj msg)
          (* 3 code-review-section-indent-width))
-        (when-let (reactions-obj (oref obj reactions))
+        (when-let* ((reactions-obj (oref obj reactions)))
           (code-review-comment-insert-reactions
            reactions-obj
            "code-comment"
@@ -1314,7 +1292,10 @@ Optionally DELETE? flag must be set if you want to remove it."
   ;;; hunk groups are necessary because we usually have multiple reviews about
   ;;; the same original position across different commits snapshots.
   ;;; as github UI we will add those hunks and its comments
-  (let* ((hunk-groups (-group-by (lambda (el) (oref el diffHunk)) comments))
+  ;; Gitlab comments have no diffHunk; group them under "" (not nil), which
+  ;; is the key `safe-hunk' looks them up with below.
+  (let* ((hunk-groups (-group-by (lambda (el) (or (oref el diffHunk) ""))
+                                 comments))
          (hunks (a-keys hunk-groups))
          (amount-loc-internal amount-loc))
     (dolist (hunk hunks)
@@ -1379,7 +1360,7 @@ Optionally DELETE? flag must be set if you want to remove it."
                       (code-review--insert-html
                        (oref c msg)
                        (* 3 code-review-section-indent-width))
-                      (when-let (reactions-obj (oref c reactions))
+                      (when-let* ((reactions-obj (oref c reactions)))
                         (code-review-comment-insert-reactions
                          reactions-obj
                          "outdated-comment"
@@ -1565,11 +1546,13 @@ Please Report this Bug" path-name))
           ;;; version of the buffer that had more lines than now.
           ;;; call function to write the remaining comments.
           ;;; important to only consider comments for this path.
-          (when-let (missing-paths (code-review-utils--missing-outdated-commments?
+          (when-let* ((missing-paths (code-review-utils--missing-outdated-commments?
                                     path-name
                                     code-review-section-hold-written-comment-ids
-                                    code-review-section-grouped-comments))
-            (when (and (eobp)
+                                    code-review-section-grouped-comments)))
+            ;; After the file's last hunk: the next text is not another hunk.
+            ;; (Checking only `eobp' missed every file but the last one.)
+            (when (and (or (eobp) (not (looking-at "@@ ")))
                        code-review-section--display-all-comments)
               (code-review-section-insert-outdated-comment-missing
                path-name
@@ -1651,10 +1634,6 @@ If you want to display a minibuffer MSG in the end."
   "Check if the RES has a message for auth token not set for GITLAB."
   (string-prefix-p "Required Gitlab token" (-first-item (a-get res 'error))))
 
-(cl-defmethod code-review--auth-token-set? ((_bitbucket code-review-bitbucket-repo) res)
-  "Check if the RES has a message for auth token not set for BITBUCKET."
-  (string-prefix-p "Required Bitbucket token" (-first-item (a-get res 'error))))
-
 (cl-defmethod code-review--auth-token-set? (obj res)
   "Default catch all unknown values passed to this function as OBJ and RES."
   (code-review-utils--log
@@ -1707,7 +1686,7 @@ If you want to display a minibuffer MSG in the end."
 (cl-defmethod code-review--internal-build ((_gitlab code-review-gitlab-repo) progress res &optional buff-name msg)
   "Helper function to build process for GITLAB based on the fetched RES informing PROGRESS."
 
-  (when-let (err (a-get (-second-item res) 'errors))
+  (when-let* ((err (a-get (-second-item res) 'errors)))
     (code-review-utils--log
      "code-review--internal-build"
      (format "Data returned by GraphQL API: \n%s" (prin1-to-string err))))
@@ -1733,46 +1712,6 @@ If you want to display a minibuffer MSG in the end."
   (progress-reporter-update progress 6)
   (code-review--trigger-hooks buff-name nil msg)
   (progress-reporter-done progress))
-
-(cl-defmethod code-review--internal-build ((_bitbucket code-review-bitbucket-repo) progress res &optional buff-name msg)
-  "Helper function to build process for BITBUCKET based on the fetched RES informing PROGRESS."
-  (prin1 (format "RESULT:%s\n" (-second-item res)))
-  (let* ((raw-infos (let-alist (-second-item res)
-                      `((title . ,.title)
-                        (author . ((login . ,.author.nickname)
-                                   (url . ,(format "https://%s/%s"
-                                                   code-review-bitbucket-base-url
-                                                   .author.nickname))))
-                        (number . ,.id)
-                        (state . ,.state)
-                        (bodyHTML . ,.rendered.description.html)
-                        (headRef (target (oid . ,.source.commit.hash)))
-                        (baseRefName . ,.destination.branch.name)
-                        (headRefName . ,.source.branch.name)
-                        (comments (nodes . ,.comments.nodes))
-                        (commits . ,.commits)
-                        (reviews (nodes . ,.reviews.nodes))))))
-
-    ;; 1. save raw diff data
-    (progress-reporter-update progress 3)
-    (code-review-db--pullreq-raw-diff-update
-     (code-review-utils--clean-diff-prefixes
-      (a-get (-first-item res) 'message)))
-
-    ;; 1.1. compute position line numbers to diff line numbers
-    (progress-reporter-update progress 4)
-    (code-review-bitbucket-pos-line-number->diff-line-number
-     (a-get (-first-item res) 'message))
-
-    ;; 1.2 save raw info data e.g. data from GraphQL API
-    (progress-reporter-update progress 4)
-    (code-review-db--pullreq-raw-infos-update
-     (code-review-bitbucket--fix-diff-comments raw-infos))
-
-    ;; 1.3 trigger renders
-    (progress-reporter-update progress 5)
-    (code-review--trigger-hooks buff-name nil msg)
-    (progress-reporter-done progress)))
 
 (defcustom code-review-log-raw-request-responses nil
   "Log the Raw request responses from your VC provider."
