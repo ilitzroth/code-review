@@ -169,6 +169,11 @@ OUTDATED."
     (define-key map (kbd "C-c RET") 'code-review-submit-single-diff-comment-at-point)
     (define-key map (kbd "C-c C-s") 'code-review-comment-code-suggestion)
     (define-key map (kbd "G") 'code-review-reload)
+    ;; Diff hunks and file headings bind C-<return> to magit's visit command,
+    ;; which cannot work here: the review buffer is not in the clone.
+    (define-key map (kbd "C-<return>") 'code-review-visit-file-at-point)
+    (define-key map [remap magit-diff-visit-worktree-file]
+                'code-review-visit-file-at-point)
     (set-keymap-parent map magit-section-mode-map)
     map))
 

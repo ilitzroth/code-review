@@ -753,6 +753,115 @@ If a valid ASSIGNEE is provided, use that instead."
           `(define-obsolete-function-alias ',old-name ',new-name "v0.0.5"))
         code-review-actions--renamed)))
 
+;;;
+;;;; * Visit the file at point in the local clone
+
+(declare-function forge-checkout-pullreq "forge-commands" (pullreq))
+(declare-function magit-anything-modified-p "magit-git" (&optional ignored-submodules files))
+
+(defun code-review--pr-full-path (pr)
+  "Return PR's project path, e.g. \"group/subgroup/project\"."
+  (url-unhex-string (concat (oref pr owner) "/" (oref pr repo))))
+
+(defun code-review--local-repository (pr)
+  "Return the Forge repository of PR that has a local clone, or nil."
+  (let* ((path (code-review--pr-full-path pr))
+         (owner (directory-file-name (file-name-directory path)))
+         (name (file-name-nondirectory path)))
+    (seq-find (lambda (repo)
+                (let ((dir (oref repo worktree)))
+                  (and dir (file-directory-p dir))))
+              (mapcar (lambda (id) (closql-get (forge-db) id))
+                      (forge-sql-car [:select id :from repository
+                                      :where (and (= owner $s1)
+                                                  (= name $s2))]
+                                     owner name)))))
+
+(defun code-review--pr-head-sha (pr)
+  "Return the commit at the head of PR."
+  (let ((infos (oref pr raw-infos)))
+    (or (a-get-in infos (list 'diffRefs 'headSha))
+        (a-get-in infos (list 'headRef 'target 'oid)))))
+
+(defun code-review--hunk-section-at-point ()
+  "Return the diff hunk section at point, or nil."
+  (let ((section (magit-current-section)))
+    (while (and section (not (magit-hunk-section-p section)))
+      (setq section (oref section parent)))
+    section))
+
+(defun code-review--file-section-at-point ()
+  "Return the diff file section at point, or nil."
+  (let ((section (magit-current-section)))
+    (while (and section (not (magit-file-section-p section)))
+      (setq section (oref section parent)))
+    section))
+
+(defun code-review--new-file-line-at-point (hunk)
+  "Return the line in the new version of the file for point in HUNK.
+Only the hunk's own context and added lines count; comment sections
+inserted into the hunk and removed lines do not.  On such a line,
+return the last new-file line before it."
+  (let* ((value (alist-get 'value (oref hunk value)))
+         (start (car (car (last value))))  ; "+START,LEN" of the header
+         (target (line-beginning-position))
+         (count 0))
+    (save-excursion
+      (goto-char (oref hunk content))
+      (while (<= (point) target)
+        (when (and (eq (magit-section-at (point)) hunk)
+                   (memq (char-after) '(?\s ?+)))
+          (setq count (1+ count)))
+        (forward-line 1)))
+    (max start (+ start count -1))))
+
+(defun code-review-visit-file-at-point ()
+  "Visit the file at point in the local clone of the PR's repository.
+The clone is the worktree Forge knows for the repository.  Point goes
+to the line at point in the diff (in the new version of the file).
+When the clone is not at the PR's head commit, offer to check out the
+PR's branch there (only if the clone has no uncommitted changes), or
+to visit the file as it is."
+  (interactive)
+  (let* ((pr (code-review-db-get-pullreq))
+         (file-section (or (code-review--file-section-at-point)
+                           (user-error "Not on a file or diff line")))
+         (path (string-remove-prefix "b/" (oref file-section value)))
+         (hunk (code-review--hunk-section-at-point))
+         (line (if hunk (code-review--new-file-line-at-point hunk) 1))
+         (repo (or (code-review--local-repository pr)
+                   (user-error "No local clone of %s known to Forge"
+                               (code-review--pr-full-path pr))))
+         (default-directory (oref repo worktree))
+         (head (code-review--pr-head-sha pr)))
+    (unless (or (not head) (equal (magit-rev-parse "HEAD") head))
+      (pcase (car (read-multiple-choice
+                   (format "%s is not at the head of %s!%s; "
+                           (abbreviate-file-name default-directory)
+                           (code-review--pr-full-path pr) (oref pr number))
+                   '((?c "checkout" "check out the PR's branch in the clone")
+                     (?v "visit" "visit the file as it is in the clone")
+                     (?q "quit" "do nothing"))))
+        (?c (when (magit-anything-modified-p)
+              (user-error "%s has uncommitted changes; not checking out"
+                          (abbreviate-file-name default-directory)))
+            (forge-checkout-pullreq
+             (or (forge-get-pullreq repo (string-to-number
+                                          (format "%s" (oref pr number))))
+                 (user-error "Forge does not know this PR yet; pull \
+the repository's topics first (N f f in magit)")))
+            (unless (equal (magit-rev-parse "HEAD") head)
+              (message "Checked out the PR's branch, but it is not at the \
+PR's head commit yet; pull to update it")))
+        (?v nil)
+        (_ (user-error "Quit"))))
+    (let ((file (expand-file-name path default-directory)))
+      (unless (file-exists-p file)
+        (user-error "%s does not exist in the clone" path))
+      (pop-to-buffer (find-file-noselect file))
+      (goto-char (point-min))
+      (forward-line (1- line)))))
+
 (code-review-set-obsolete-fns)
 
 (provide 'code-review-actions)

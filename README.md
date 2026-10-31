@@ -182,6 +182,13 @@ Review` buffer.
 | C-c C-r | pr description                        | Add Reaction                |
 | RET     | reaction (on emoji symbol)            | Endorse or Remove Reaction  |
 | RET     | Request Reviewer                      | Request reviewer at point   |
+| C-RET   | diff line or file heading             | Visit file in local clone   |
+
+`C-RET` (`code-review-visit-file-at-point`) opens the file at point in your
+local clone of the repository (the worktree Forge knows for it), at the line
+at point.  When the clone is not at the PR's head commit, it offers to check
+out the PR's branch there (only if the clone has no uncommitted changes), so
+that the code you read, and tools like Eglot, see the PR's version.
 
 
 ## Binding suggestions
