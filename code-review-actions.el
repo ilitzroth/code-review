@@ -401,7 +401,8 @@ Optionally set a FEEDBACK message."
 
 (defun code-review--labels-to-send (pr choices)
   "The PR has a list of CHOICES for labels that should be send.
-This function will make sure we clean the list of labels and/or disable all of them upstream."
+This function will make sure we clean the list of labels and/or disable
+all of them upstream."
   (when (not (-contains-p choices "<clean all labels>"))
     (code-review--distinct-labels
      (append
@@ -757,7 +758,8 @@ If a valid ASSIGNEE is provided, use that instead."
 ;;;; * Visit the file at point in the local clone
 
 (declare-function forge-checkout-pullreq "forge-commands" (pullreq))
-(declare-function magit-anything-modified-p "magit-git" (&optional ignored-submodules files))
+(declare-function magit-anything-modified-p "magit-git"
+                  (&optional ignored-submodules files))
 
 (defun code-review--pr-full-path (pr)
   "Return PR's project path, e.g. \"group/subgroup/project\"."

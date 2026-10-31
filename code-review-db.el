@@ -416,7 +416,7 @@
              (curr-path-re-enabled? nil))
         (closql-with-transaction db
           ;;; disable all previous ones and enable curr-path is already exists
-          (-map
+          (mapc
            (lambda (path)
              (if (string-equal (oref path name) curr-path)
                  (progn

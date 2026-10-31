@@ -187,8 +187,7 @@ an object then we need to build the diff string ourselves here."
 (defun code-review-gitlab--review-comment->code-review-comment (comment)
   "Transform a Gitlab review COMMENT into `code-review-comment' structure."
   (let-alist comment
-    (let* ((path .position.oldPath)
-           (mapping  (alist-get .position.oldPath
+    (let* ((mapping  (alist-get .position.oldPath
                                 code-review-gitlab-line-diff-mapping
                                 nil nil 'equal))
            (line-obj (if .position.oldLine
@@ -350,8 +349,10 @@ The payload is used to send a MR review to Gitlab."
       d))
     d))
 
-(cl-defmethod code-review-pullreq-infos ((gitlab code-review-gitlab-repo) fallback? callback)
-  "Get PR details from GITLAB, choose minimal query on FALLBACK? and dispatch to CALLBACK."
+(cl-defmethod code-review-pullreq-infos ((gitlab code-review-gitlab-repo)
+                                         _fallback? callback)
+  "Get PR details from GITLAB and dispatch to CALLBACK.
+Gitlab has no minimal query, so _FALLBACK? is ignored."
   (let* ((owner (oref gitlab owner))
          (repo (oref gitlab repo))
          (repo-clean (replace-regexp-in-string "%2F" "/" repo))

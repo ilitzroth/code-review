@@ -44,7 +44,8 @@
   "Regex to identify hunk sections.")
 
 (defun code-review-parse-hunk-table (hunkstring)
-  "Table with old line, new line, added/deleted line and relative pos from HUNKSTRING."
+  "Table from HUNKSTRING.
+Each row has the old line, new line, added/deleted line and relative pos."
   (if (string-prefix-p "Binary files" hunkstring)
       nil
     (let* ((difflines (split-string hunkstring "\n"))
@@ -120,7 +121,8 @@
       res)))
 
 (defun code-review-parse-hunk-relative-pos (hunktable line-obj)
-  "Given a HUNKTABLE (`code-review-parse-hunk-table') and LINE-OBJ return absolute diff pos."
+  "Return the absolute diff pos of LINE-OBJ in HUNKTABLE.
+HUNKTABLE is the result of `code-review-parse-hunk-table'."
   (let ((row
          (let-alist line-obj
            (if .old

@@ -28,7 +28,8 @@
 ;;; Code:
 
 (cl-defgeneric code-review-pullreq-infos (obj fallback? callback)
-  "Return infos Pull Request from a OBJ, use FALLBACK? to minimal query, run CALLBACK.")
+  "Return infos Pull Request from a OBJ and run CALLBACK.
+Use FALLBACK? to choose the minimal query.")
 
 (cl-defgeneric code-review-infos-deferred (obj fallback?)
   "Run OBJ and set if minimal query should be run using FALLBACK?.")

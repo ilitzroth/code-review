@@ -485,7 +485,8 @@ https://github.com/wandersoncferreira/code-review#configuration"))
 ")
 
 (cl-defmethod code-review-pullreq-infos ((github code-review-github-repo) fallback? callback)
-  "Get PR details from GITHUB, use FALLBACK? to choose minimal query and dispatch to CALLBACK."
+  "Get PR details from GITHUB and dispatch to CALLBACK.
+Use FALLBACK? to choose the minimal query."
   (let* ((repo (oref github repo))
          (owner (oref github owner))
          (num (if (numberp (oref github number))
@@ -668,7 +669,8 @@ Optionally ask for the FALLBACK? query."
             :errorback #'code-review-github-errback))
 
 (cl-defmethod code-review-send-reaction ((github code-review-github-repo) context-name comment-id reaction)
-  "Set REACTION in GITHUB pullreq COMMENT-ID given a CONTEXT-NAME e.g. issue, pr, discussion."
+  "Set REACTION in GITHUB pullreq COMMENT-ID.
+CONTEXT-NAME is e.g. issue, pr or discussion."
   (let ((path (pcase context-name
                 ("pr-description"
                  (format "issues/%s/reactions" (oref github number)))
@@ -691,7 +693,8 @@ Optionally ask for the FALLBACK? query."
                :payload (a-alist 'content r))))
 
 (cl-defmethod code-review-delete-reaction ((github code-review-github-repo) context-name comment-id reaction-id)
-  "Delete REACTION-ID in GITHUB pullreq COMMENT-ID given a CONTEXT-NAME e.g. issue, pr, discussion."
+  "Delete REACTION-ID in GITHUB pullreq COMMENT-ID.
+CONTEXT-NAME is e.g. issue, pr or discussion."
   (let ((path (pcase context-name
                 ("pr-description"
                  (format "issues/%s/reactions/%s" (oref github number) reaction-id))

@@ -1105,7 +1105,8 @@ Optionally DELETE? flag must be set if you want to remove it."
   (code-review--insert-html (oref obj msg) (* 3 code-review-section-indent-width)))
 
 (defun code-review--toggle-reaction-at-point (pr context-name comment-id existing-reactions reaction)
-  "Given a PR, use the CONTEXT-NAME to toggle REACTION in COMMENT-ID considering EXISTING-REACTIONS."
+  "Given a PR, use the CONTEXT-NAME to toggle REACTION in COMMENT-ID.
+EXISTING-REACTIONS are the reactions COMMENT-ID already has."
   (let* ((res (code-review-send-reaction pr context-name comment-id reaction))
          (reaction-id (a-get res 'id))
          (node-id (a-get res 'node_id))
@@ -1222,7 +1223,7 @@ Optionally DELETE? flag must be set if you want to remove it."
 (cl-defmethod code-review-comment-insert-lines ((obj code-review-local-comment-section))
   "Insert local comment lines present in the OBJ."
   (magit-insert-section (code-review-local-comment-section obj)
-    (let ((heading "Comment by YOU: "))
+    (let ((heading (copy-sequence "Comment by YOU: ")))
       (add-face-text-property 0 (length heading) (oref obj heading-face) t heading)
       (magit-insert-heading heading))
     (magit-insert-section (code-review-local-comment-section obj)
@@ -1236,7 +1237,7 @@ Optionally DELETE? flag must be set if you want to remove it."
 (cl-defmethod code-review-comment-insert-lines ((obj code-review-reply-comment-section))
   "Insert reply comment lines present in the OBJ."
   (magit-insert-section (code-review-reply-comment-section obj)
-    (let ((heading "Reply by YOU: "))
+    (let ((heading (copy-sequence "Reply by YOU: ")))
       (add-face-text-property 0 (length heading) (oref obj heading-face) t heading)
       (magit-insert-heading heading))
     (magit-insert-section (code-review-reply-comment-section obj)
@@ -1430,9 +1431,10 @@ A quite good assumption: every comment in an outdated hunk will be outdated."
     (magit-insert-heading)))
 
 (defun code-review-section--magit-diff-insert-file-section
-    (file orig status modes rename header binary long-status)
+    (file orig status modes rename header _binary long-status)
   "Overwrite the original Magit function on `magit-diff.el' FILE.
-ORIG, STATUS, MODES, RENAME, HEADER, BINARY and LONG-STATUS are arguments of the original fn."
+ORIG, STATUS, MODES, RENAME, HEADER, _BINARY and LONG-STATUS are arguments
+of the original fn."
 
   ;;; --- beg -- code-review specific code.
   ;;; I need to set a reference point for the first hunk header
@@ -1575,9 +1577,9 @@ Please Report this Bug" path-name))
 (defclass code-review--root-section (magit-section)
   ((body :initform nil)))
 
-(defun code-review--trigger-hooks (buff-name &optional commit-focus? msg)
+(defun code-review--trigger-hooks (buff-name &optional _commit-focus? msg)
   "Trigger magit section hooks and draw BUFF-NAME.
-Run code review commit buffer hook when COMMIT-FOCUS? is non-nil.
+_COMMIT-FOCUS? is unused.
 If you want to display a minibuffer MSG in the end."
   (unwind-protect
       (progn
@@ -1599,7 +1601,7 @@ If you want to display a minibuffer MSG in the end."
               (erase-buffer)
               (insert (code-review-db--pullreq-raw-diff))
               (insert ?\n))
-            (magit-insert-section section (code-review--root-section)
+            (magit-insert-section (code-review--root-section)
               (magit-insert-section (code-review)
                 (magit-run-section-hook 'code-review-sections-hook))
               (magit-insert-section (code-review-files-report-section)
@@ -1645,7 +1647,8 @@ If you want to display a minibuffer MSG in the end."
   (error "Unknown backend obj created.  Look at `code-review-log-file' and report the bug upstream"))
 
 (cl-defmethod code-review--internal-build ((_github code-review-github-repo) progress res &optional buff-name msg)
-  "Helper function to build process for GITHUB based on the fetched RES informing PROGRESS."
+  "Helper function to build process for GITHUB.
+Based on the fetched RES, informing PROGRESS."
   (let* ((errors-complete-query (a-get (-second-item res) 'errors))
          (raw-infos-complete (a-get-in (-second-item res) (list 'data 'repository 'pullRequest)))
          (raw-infos-fallback (a-get-in (-third-item res) (list 'data 'repository 'pullRequest)))
@@ -1684,7 +1687,8 @@ If you want to display a minibuffer MSG in the end."
     (progress-reporter-done progress)))
 
 (cl-defmethod code-review--internal-build ((_gitlab code-review-gitlab-repo) progress res &optional buff-name msg)
-  "Helper function to build process for GITLAB based on the fetched RES informing PROGRESS."
+  "Helper function to build process for GITLAB.
+Based on the fetched RES, informing PROGRESS."
 
   (when-let* ((err (a-get (-second-item res) 'errors)))
     (code-review-utils--log
