@@ -33,6 +33,7 @@
 (require 'magit-section)
 (require 'magit-diff)
 (require 'shr)
+(require 'url-util)
 
 (require 'code-review-faces)
 (require 'code-review-db)
@@ -58,9 +59,25 @@
   :type 'integer)
 
 (defcustom code-review-buffer-name "*Code Review*"
-  "Name of the code review main buffer."
+  "Base name of the review buffers.
+Each pull request gets its own buffer, named after this, the repository
+and the number; see `code-review--buffer-name'."
   :group 'code-review
   :type 'string)
+
+(defun code-review--buffer-name (&optional pr)
+  "Name of the review buffer of PR, by default the current pull request.
+For example \"*Code Review: visor!4*\" for a Gitlab merge request and
+\"*Code Review: emacs#12*\" for a Github pull request."
+  (if-let* ((pr (or pr (code-review-db-get-pullreq))))
+      (format "%s: %s%s%s*"
+              (string-remove-suffix "*" code-review-buffer-name)
+              ;; Gitlab repos are stored url-encoded, with their group:
+              ;; "projects%2Fhighwire".
+              (file-name-nondirectory (url-unhex-string (oref pr repo)))
+              (if (code-review-gitlab-repo-p pr) "!" "#")
+              (oref pr number))
+    code-review-buffer-name))
 
 (defcustom code-review-commit-buffer-name "*Code Review Commit*"
   "Name of the code review commit buffer."
@@ -1127,7 +1144,7 @@ EXISTING-REACTIONS are the reactions COMMENT-ID already has."
         ("code-comment"
          (code-review-code-comment-add-reaction comment-id node-id reaction))))
     (code-review--build-buffer
-     code-review-buffer-name)))
+     (code-review--buffer-name))))
 
 (defun code-review-toggle-reaction-at-point (comment-id context-name)
   "Add reaction at point given a COMMENT-ID and CONTEXT-NAME."
@@ -1726,11 +1743,12 @@ Based on the fetched RES, informing PROGRESS."
   "Build BUF-NAME set COMMIT-FOCUS? mode to use commit list of hooks.
 If you want to provide a MSG for the end of the process."
   (let ((buff-name (if (not buf-name)
-                       code-review-buffer-name
+                       (code-review--buffer-name)
                      buf-name)))
     (if (not code-review-section-full-refresh?)
         (code-review--trigger-hooks buff-name commit-focus? msg)
       (let ((obj (code-review-db-get-pullreq))
+            (pr-id code-review-db--pullreq-id)
             (progress (make-progress-reporter "Fetch diff PR..." 1 6)))
         (progress-reporter-update progress 1)
         (deferred:$
@@ -1762,7 +1780,11 @@ If you want to provide a MSG for the end of the process."
                               ((code-review-gitlab-repo-p obj)
                                "Gitlab")
                               (t "Unknown"))))
-                (code-review--internal-build obj progress x buff-name msg))))
+                ;; The user may have switched reviews while this was
+                ;; fetched; store and render it for the one it is for.
+                (code-review-db-with-pullreq-id pr-id
+                  (code-review--internal-build
+                   obj progress x buff-name msg)))))
           (deferred:error it
             (lambda (err)
               (code-review-utils--log
@@ -1785,7 +1807,7 @@ If you want to provide a MSG for the end of the process."
 (defun code-review-section-delete-comment ()
   "Delete a local comment."
   (interactive)
-  (with-current-buffer code-review-buffer-name
+  (with-current-buffer (code-review--buffer-name)
     (setq code-review-comment-cursor-pos (point))
     (with-slots (value) (magit-current-section)
       (code-review-db-delete-raw-comment (oref value internalId))

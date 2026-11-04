@@ -102,7 +102,6 @@ For internal usage only.")
 ;; remove free variable warnings
 (defvar code-review-comment-buffer-name)
 (defvar code-review-commit-buffer-name)
-(defvar code-review-buffer-name)
 
 ;;; general functons
 
@@ -248,7 +247,7 @@ Optionally define a MSG."
 Inform if a SUGGESTION-CODE? is being proposed."
   (interactive)
   (let ((section (magit-current-section)))
-    (with-current-buffer (get-buffer code-review-buffer-name)
+    (with-current-buffer (get-buffer (code-review--buffer-name))
       (setq code-review-comment-cursor-pos (point)
             code-review-comment-suggestion? suggestion-code?)
       (with-slots (value) section
@@ -286,7 +285,7 @@ Inform if a SUGGESTION-CODE? is being proposed."
 Clean the DEFAULT-BUFF-MSG from the text if any."
   (let* ((buff-name (if code-review-comment-commit-buffer?
                         code-review-commit-buffer-name
-                      code-review-buffer-name))
+                      (code-review--buffer-name)))
          (clean-msg (code-review-utils--comment-clean-msg
                      (oref obj msg)
                      default-buff-msg))
@@ -313,9 +312,10 @@ Clean the DEFAULT-BUFF-MSG from the text if any."
           (code-review-new-code-comment
            (code-review-db-get-pullreq)
            obj
-           (lambda (&rest _)
-             (let ((code-review-section-full-refresh? t))
-               (code-review--build-buffer buff-name)))))
+           (code-review-db-callback
+            (lambda (&rest _)
+              (let ((code-review-section-full-refresh? t))
+                (code-review--build-buffer buff-name))))))
       (progn
         (code-review-db--pullreq-raw-comments-update raw-comment)
         (code-review--build-buffer buff-name)))))
@@ -367,19 +367,21 @@ Clean the DEFAULT-BUFF-MSG from the text if any."
                              (a-assoc 'bodyHTML nil)))
       (code-review-send-description
        pr
-       (lambda ()
-         (code-review-db-update pr)
-         (code-review--build-buffer)
-         (code-review-comment-reset-global-vars))))
+       (code-review-db-callback
+        (lambda ()
+          (code-review-db-update pr)
+          (code-review--build-buffer)
+          (code-review-comment-reset-global-vars)))))
 
      (code-review-comment-title?
       (oset pr title comment-text)
       (code-review-send-title
        pr
-       (lambda ()
-         (code-review-db-update pr)
-         (code-review--build-buffer)
-         (code-review-comment-reset-global-vars))))
+       (code-review-db-callback
+        (lambda ()
+          (code-review-db-update pr)
+          (code-review--build-buffer)
+          (code-review-comment-reset-global-vars)))))
 
      (code-review-comment-feedback?
       (let ((msg
@@ -411,10 +413,11 @@ Clean the DEFAULT-BUFF-MSG from the text if any."
              (code-review-utils--comment-clean-msg
               comment-text
               code-review-comment-single-comment-msg))
-            (callback (lambda (&rest _)
-                        (let ((code-review-section-full-refresh? t))
-                          (code-review--build-buffer)
-                          (code-review-comment-reset-global-vars)))))
+            (callback (code-review-db-callback
+                       (lambda (&rest _)
+                         (let ((code-review-section-full-refresh? t))
+                           (code-review--build-buffer)
+                           (code-review-comment-reset-global-vars))))))
         (code-review-new-issue-comment pr msg callback)))
      (t
       (progn
@@ -458,7 +461,7 @@ Clean the DEFAULT-BUFF-MSG from the text if any."
   "Quit the comment window."
   (interactive)
   (code-review-comment--close (current-buffer))
-  (with-current-buffer (get-buffer code-review-buffer-name)
+  (with-current-buffer (get-buffer (code-review--buffer-name))
     (goto-char code-review-comment-cursor-pos)
     (code-review-comment-reset-global-vars)))
 
@@ -471,7 +474,10 @@ Clean the DEFAULT-BUFF-MSG from the text if any."
     map))
 
 (define-derived-mode code-review-comment-mode markdown-mode "Code Review Comment"
-  "Code Review Comment.")
+  "Code Review Comment.
+The comment belongs to the pull request of the review it was started
+from, also when another review was opened in the meantime."
+  (code-review-db-bind-buffer))
 
 (provide 'code-review-comment)
 ;;; code-review-comment.el ends here

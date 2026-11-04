@@ -212,7 +212,43 @@
 
 ;;; Core
 
-(defvar code-review-db--pullreq-id nil)
+(defvar code-review-db--pullreq-id nil
+  "Id of the current pull request, the one commands act on.
+Never buffer-local, so that `let' can bind it for asynchronous
+callbacks; see `code-review-db-with-pullreq-id'.")
+
+(defvar-local code-review-db--buffer-pullreq-id nil
+  "Id of the pull request this review or comment buffer belongs to.")
+(put 'code-review-db--buffer-pullreq-id 'permanent-local t)
+
+(defun code-review-db--use-buffer-pullreq ()
+  "Make the current buffer's pull request the current one.
+Run from the `pre-command-hook' of review and comment buffers, so that
+with several reviews open, each acts on its own pull request."
+  (when code-review-db--buffer-pullreq-id
+    (setq code-review-db--pullreq-id code-review-db--buffer-pullreq-id)))
+
+(defun code-review-db-bind-buffer ()
+  "Tie the current buffer to the current pull request."
+  (setq-local code-review-db--buffer-pullreq-id code-review-db--pullreq-id)
+  (add-hook 'pre-command-hook #'code-review-db--use-buffer-pullreq nil t))
+
+(defmacro code-review-db-with-pullreq-id (id &rest body)
+  "Run BODY with the pull request ID as the current one.
+For callbacks of requests: by the time they run, the user may have
+switched to another review."
+  (declare (indent 1) (debug t))
+  `(let ((code-review-db--pullreq-id ,id))
+     ,@body))
+
+(defun code-review-db-callback (fn)
+  "Return FN as a request callback for the current pull request.
+FN runs with this pull request current, whichever one is current when
+the response arrives."
+  (let ((id code-review-db--pullreq-id))
+    (lambda (&rest args)
+      (code-review-db-with-pullreq-id id
+        (apply fn args)))))
 
 ;; Helper
 

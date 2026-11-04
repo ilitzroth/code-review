@@ -47,7 +47,6 @@
 ;; remove free variable warnings
 (defvar code-review-comment-buffer-name)
 (defvar code-review-commit-buffer-name)
-(defvar code-review-buffer-name)
 
 ;;;
 ;;;; * Submit review
@@ -125,7 +124,7 @@ If you want only to submit replies, use ONLY-REPLY? as non-nil."
 
     (let ((replies nil)
           (local-comments nil))
-      (with-current-buffer (get-buffer code-review-buffer-name)
+      (with-current-buffer (get-buffer (code-review--buffer-name))
         (save-excursion
           (goto-char (point-min))
           (magit-wash-sequence
@@ -169,24 +168,26 @@ If you want only to submit replies, use ONLY-REPLY? as non-nil."
             (code-review-send-review
              review-obj
              (lambda (&rest _)
-               (let ((code-review-section-full-refresh? t))
-                 (oset pr finished t)
-                 (oset pr finished-at (current-time-string))
-                 (code-review-db-update pr)
-                 (code-review--build-buffer
-                  code-review-buffer-name
-                  nil
-                  "Done submitting review")))))
+               (code-review-db-with-pullreq-id (oref pr id)
+                 (let ((code-review-section-full-refresh? t))
+                   (oset pr finished t)
+                   (oset pr finished-at (current-time-string))
+                   (code-review-db-update pr)
+                   (code-review--build-buffer
+                    (code-review--buffer-name pr)
+                    nil
+                    "Done submitting review"))))))
 
           (when (oref replies-obj replies)
             (code-review-send-replies
              replies-obj
              (lambda (&rest _)
-               (let ((code-review-section-full-refresh? t))
-                 (code-review--build-buffer
-                  code-review-buffer-name
-                  nil
-                  "Done submitting review and replies"))))))))))
+               (code-review-db-with-pullreq-id (oref pr id)
+                 (let ((code-review-section-full-refresh? t))
+                   (code-review--build-buffer
+                    (code-review--buffer-name pr)
+                    nil
+                    "Done submitting review and replies")))))))))))
 
 ;;;###autoload
 (defun code-review-submit-approve (&optional feedback)
@@ -427,9 +428,10 @@ Rewrite all current labels with the options chosen here."
         (oset pr labels labels)
         (code-review-send-labels
          pr
-         (lambda ()
-           (code-review-db-update pr)
-           (code-review--build-buffer)))))))
+         (code-review-db-callback
+          (lambda ()
+            (code-review-db-update pr)
+            (code-review--build-buffer))))))))
 
 (defun code-review--set-assignee-field (obj &optional assignee)
   "Change assignee header field given an OBJ.
@@ -444,9 +446,10 @@ If a valid ASSIGNEE is provided, use that instead."
     (oset obj assignees (list `((name) (login . ,candidate))))
     (code-review-send-assignee
      obj
-     (lambda ()
-       (closql-insert (code-review-db) obj t)
-       (code-review--build-buffer)))))
+     (code-review-db-callback
+      (lambda ()
+        (closql-insert (code-review-db) obj t)
+        (code-review--build-buffer))))))
 
 (defun code-review-set-assignee (&rest _)
   "Change assignee for the current PR.  Sent immediately.."
@@ -477,9 +480,10 @@ If a valid ASSIGNEE is provided, use that instead."
                 (oset pr milestones milestone)
                 (code-review-send-milestone
                  pr
-                 (lambda ()
-                   (code-review-db-update pr)
-                   (code-review--build-buffer))))
+                 (code-review-db-callback
+                  (lambda ()
+                    (code-review-db-update pr)
+                    (code-review--build-buffer)))))
             (message "No milestone found.")))
       (message "Not supported in %s yet."
                (cond
@@ -585,13 +589,14 @@ If a valid ASSIGNEE is provided, use that instead."
     (code-review-request-review
      pr
      ids
-     (lambda ()
-       (let* ((infos (oref pr raw-infos))
-              (new-infos
-               (a-assoc-in infos (list 'reviewRequests 'nodes) logins)))
-         (oset pr raw-infos new-infos)
-         (code-review-db-update pr)
-         (code-review--build-buffer))))))
+     (code-review-db-callback
+      (lambda ()
+        (let* ((infos (oref pr raw-infos))
+               (new-infos
+                (a-assoc-in infos (list 'reviewRequests 'nodes) logins)))
+          (oset pr raw-infos new-infos)
+          (code-review-db-update pr)
+          (code-review--build-buffer)))))))
 
 ;;;###autoload
 (defun code-review-request-review-at-point (&rest _)
@@ -665,7 +670,7 @@ If a valid ASSIGNEE is provided, use that instead."
   "Go to next comment in the buffer."
   (interactive)
   (let ((initial-point (point)))
-    (with-current-buffer (get-buffer code-review-buffer-name)
+    (with-current-buffer (get-buffer (code-review--buffer-name))
       (let ((comment-position))
         (save-excursion
           (forward-line)
@@ -684,7 +689,7 @@ If a valid ASSIGNEE is provided, use that instead."
   "Go to previous comment in the buffer."
   (interactive)
   (let ((initial-point (point)))
-    (with-current-buffer (get-buffer code-review-buffer-name)
+    (with-current-buffer (get-buffer (code-review--buffer-name))
       (let ((comment-position))
         (save-excursion
           (forward-line -1)
@@ -720,7 +725,7 @@ If a valid ASSIGNEE is provided, use that instead."
   ;;       (setq code-review-comment-commit-buffer? nil
   ;;             code-review-section-full-refresh? nil)
   ;;       (kill-this-buffer)
-  ;;       (code-review--trigger-hooks code-review-buffer-name))
+  ;;       (code-review--trigger-hooks (code-review--buffer-name)))
   ;;   (message "Command must be called from Code Review Commit buffer."))
   (error "Sorry, this feature became outdated and require a rewrite!"))
 

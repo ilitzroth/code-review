@@ -109,7 +109,7 @@ OUTDATED."
         (pr-alist (code-review-utils--alist-forge-at-point)))
     (code-review-auth-source-debug)
     (code-review-utils-build-obj pr-alist)
-    (code-review--build-buffer code-review-buffer-name)))
+    (code-review--build-buffer (code-review--buffer-name))))
 
 ;;;###autoload
 (defun code-review-start (url)
@@ -119,7 +119,7 @@ OUTDATED."
     (code-review-auth-source-debug)
     (code-review-utils-build-obj-from-url url)
     (code-review--build-buffer
-     code-review-buffer-name)))
+     (code-review--buffer-name))))
 
 ;;; Commit buffer
 
@@ -158,6 +158,7 @@ OUTDATED."
    ("s t" "Title" code-review-set-title)
    ("s d" "Description" code-review-set-description)]
   ["Buffer"
+   ("v" "Visit file at point" code-review-visit-file-at-point)
    ("G" "Full reload" code-review-reload)
    ("q" "Quit" transient-quit-one)])
 
@@ -178,7 +179,10 @@ OUTDATED."
     map))
 
 (define-derived-mode code-review-mode magit-section-mode "Code Review"
-  "Code Review mode.")
+  "Code Review mode.
+Each review buffer belongs to one pull request, and its commands act on
+that pull request."
+  (code-review-db-bind-buffer))
 
 (provide 'code-review)
 ;;; code-review.el ends here

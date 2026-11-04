@@ -105,7 +105,8 @@ Customization
 @node Introduction
 @chapter Introduction
 
-Code Review shows a pull request in a @file{*Code Review*} buffer: its
+Code Review shows a pull request in its own review buffer, such as
+@file{*Code Review: visor!4*}: its
 header (author, title, state, branches, labels, assignees, reviewers),
 its commits, its description, the conversation and the diff of every
 changed file, with the review comments placed on the lines they were
@@ -232,6 +233,15 @@ them in any order and change them first.
 @chapter The Review Buffer
 
 @cindex review buffer
+@cindex several reviews
+Each pull request gets its own review buffer, named after the
+repository and the number: @file{*Code Review: visor!4*} for a Gitlab
+merge request, @file{*Code Review: emacs#12*} for a Github pull
+request.  You can have several reviews open at once, for instance to
+handle an urgent one in the middle of another; the commands in a review
+buffer, and in a comment buffer started from it, act on that buffer's
+pull request.
+
 The review buffer is a Magit section buffer: @kbd{TAB} folds and unfolds
 a section, @kbd{n} and @kbd{p} move between sections and @kbd{M-n} and
 @kbd{M-p} between sibling sections, as in Magit.  It has these sections,
@@ -298,6 +308,7 @@ Add a reaction to the comment or description at point
 Promote the comment at point to a new issue.
 
 @item C-RET
+@itemx r v
 Visit the file at point in your local clone (@pxref{Visiting Files}).
 
 @item G
@@ -306,6 +317,16 @@ Reload the pull request from the forge (@code{code-review-reload}).
 
 @findex code-review-toggle-display-all-comments
 @findex code-review-toggle-display-top-level-comments
+@kindex r v
+@kindex r G
+@kindex r q
+The Transient menu's @samp{Review}, @samp{Merge}, @samp{Fast track} and
+@samp{Setters} groups are described in @ref{Submitting a Review},
+@ref{Merging}, @ref{Saving and Resuming Reviews} and @ref{Editing the
+Pull Request}.  Its @samp{Buffer} group has @kbd{r v} to visit the file
+at point, @kbd{r G} to reload the pull request and @kbd{r q} to close
+the menu.
+
 @findex code-review-toggle-display-diff-comments
 The commands @code{code-review-toggle-display-all-comments},
 @code{code-review-toggle-display-top-level-comments} and
@@ -337,7 +358,9 @@ Press @kbd{b} there to go back to the whole pull request.
 @findex code-review-comment-quit
 @findex code-review-input-mention-user-at-point
 Writing a comment, a reply or the feedback opens a
-@file{*Code Review Comment*} buffer in Markdown mode:
+@file{*Code Review Comment*} buffer in Markdown mode.  There is one such
+buffer, also with several reviews open, so finish or cancel a comment
+before starting one in another review.  It has these keys:
 
 @table @kbd
 @item C-c C-c
@@ -564,11 +587,12 @@ The database is @code{code-review-db-database-file}, by default
 @cindex visiting files
 @kindex C-RET
 @findex code-review-visit-file-at-point
-@kbd{C-RET} (@code{code-review-visit-file-at-point}) on a diff line or a
-file heading opens the file in your local clone of the repository, the
-worktree Forge knows for it, at the line at point.  When the clone is not
-at the pull request's head commit, it offers to check out the pull
-request's branch there, but only if the clone has no uncommitted changes.
+@kbd{C-RET} or @kbd{r v} (@code{code-review-visit-file-at-point}) on a
+diff line or a file heading opens the file in your local clone of the
+repository, the worktree Forge knows for it, at the line at point.  When
+the clone is not at the pull request's head commit, it offers to check
+out the pull request's branch there, but only if the clone has no
+uncommitted changes.
 Then the code you read, and tools like Eglot, see the pull request's
 version.
 
@@ -818,7 +842,9 @@ The function that shows a new review buffer; default
 @item code-review-buffer-name
 @itemx code-review-commit-buffer-name
 @itemx code-review-comment-buffer-name
-The names of the review, commit and comment buffers.
+The names of the review, commit and comment buffers.  The name of a
+review buffer is @code{code-review-buffer-name} followed by the
+repository and the number.
 
 @item code-review-section-indent-width
 The indentation of nested sections; default 1.
@@ -874,14 +900,31 @@ To show emoji such as @samp{:thumbsup:} as symbols, enable
 @node Key Binding Suggestions
 @section Key Binding Suggestions
 
-Bind @code{code-review-forge-pr-at-point} in Forge's buffers:
+Bind @code{code-review-forge-pr-at-point} in Forge's buffers, on a pull
+request in a Magit status buffer and in a pull request's own buffer:
 
 @lisp
 (with-eval-after-load 'forge
-  (define-key forge-topic-mode-map (kbd "C-c r")
+  (define-key forge-pullreq-mode-map (kbd "C-c r")
     #'code-review-forge-pr-at-point)
   (define-key forge-pullreq-section-map (kbd "C-c r")
     #'code-review-forge-pr-at-point))
+@end lisp
+
+@kindex /
+@cindex magit-dispatch
+Or bind it to @kbd{/}, which Magit leaves free, in all Magit buffers,
+and add it to Magit's dispatch menu (@kbd{?}) next to Forge's @kbd{N}.
+The @code{:inapt-if-not} greys the entry out when point is not on a pull
+request:
+
+@lisp
+(with-eval-after-load 'forge
+  (define-key magit-mode-map (kbd "/")
+    #'code-review-forge-pr-at-point)
+  (transient-append-suffix 'magit-dispatch "N"
+    '("/" "Code review" code-review-forge-pr-at-point
+      :inapt-if-not forge-current-pullreq)))
 @end lisp
 
 Delete local comments and the feedback with @kbd{k}:
@@ -895,12 +938,13 @@ Delete local comments and the feedback with @kbd{k}:
   #'code-review-section-delete-comment)
 @end lisp
 
-Move between comments with @kbd{C-c C-n} and @kbd{C-c C-p}:
+Move between comments with @kbd{C-c n} and @kbd{C-c p}.  Not
+@kbd{C-c C-n}: on a comment, that promotes it to an issue.
 
 @lisp
-(define-key code-review-mode-map (kbd "C-c C-n")
+(define-key code-review-mode-map (kbd "C-c n")
   #'code-review-comment-jump-next)
-(define-key code-review-mode-map (kbd "C-c C-p")
+(define-key code-review-mode-map (kbd "C-c p")
   #'code-review-comment-jump-previous)
 @end lisp
 
