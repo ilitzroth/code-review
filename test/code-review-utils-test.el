@@ -87,6 +87,7 @@
                        'repo "default"
                        'owner "code-review-experiment"
                        'forge 'gitlab
+                       'host "gitlab.com/api"
                        'url "https://gitlab.com/code-review-experiment/default/-/merge_requests/1")))
   (it "given a valid Gitlab URL with subgroup of a PR returns an PR-ALIST"
     (expect (code-review-utils-pr-from-url "https://gitlab.com/owner/group/subgroup/project/-/merge_requests/1")
@@ -95,6 +96,7 @@
                        'repo "group%2Fsubgroup%2Fproject"
                        'owner "owner"
                        'forge 'gitlab
+                       'host "gitlab.com/api"
                        'url "https://gitlab.com/owner/group/subgroup/project/-/merge_requests/1")))
   (it "given a valid Gitlab URL with subgroups nested of a PR returns an PR-ALIST"
     (expect (code-review-utils-pr-from-url "https://gitlab.com/owner/group/subgroup1/subgroup2/subgroup3/project/-/merge_requests/1")
@@ -103,7 +105,25 @@
                        'repo "group%2Fsubgroup1%2Fsubgroup2%2Fsubgroup3%2Fproject"
                        'owner "owner"
                        'forge 'gitlab
-                       'url "https://gitlab.com/owner/group/subgroup1/subgroup2/subgroup3/project/-/merge_requests/1"))))
+                       'host "gitlab.com/api"
+                       'url "https://gitlab.com/owner/group/subgroup1/subgroup2/subgroup3/project/-/merge_requests/1")))
+  (it "given a self-hosted Gitlab URL known to Forge uses Forge's API host"
+    (let ((forge-alist '(("git.example.com" "git.example.com/api/v4"
+                          "git.example.com" forge-gitlab-repository))))
+      (expect (alist-get 'host (code-review-utils-pr-from-url
+                                "https://git.example.com/team/app/-/merge_requests/7"))
+              :to-equal "git.example.com/api")))
+  (it "given a self-hosted Gitlab URL unknown to Forge uses HOST/api"
+    (let ((forge-alist nil))
+      (expect (code-review-utils-pr-from-url
+               "https://git.example.com/team/app/-/merge_requests/7")
+              :to-equal (a-alist
+                         'num "7"
+                         'repo "app"
+                         'owner "team"
+                         'forge 'gitlab
+                         'host "git.example.com/api"
+                         'url "https://git.example.com/team/app/-/merge_requests/7")))))
 
 (describe "COLORS")
 

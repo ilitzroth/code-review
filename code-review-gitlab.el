@@ -45,12 +45,15 @@
   :link '(custom-group-link 'code-review-github))
 
 (defcustom code-review-gitlab-host "gitlab.com/api"
-  "Host for the Gitlab api if you use the hosted version of Gitlab."
+  "Host for the Gitlab API, used when the review's host is not known.
+Each review records the API host of its merge request, taken from Forge
+or from the merge request's URL, so this is only a fallback."
   :group 'code-review-gitlab
   :type 'string)
 
 (defcustom code-review-gitlab-graphql-host "gitlab.com/api"
-  "Host for Graphql in Gitlab."
+  "Host for Graphql in Gitlab, used when the review's host is not known.
+See `code-review-gitlab-host'."
   :group 'code-review-gitlab
   :type 'string)
 
@@ -62,6 +65,23 @@
 For internal usage only.")
 
 ;;; helpers
+
+(defun code-review-gitlab--recorded-host (pr)
+  "Return the API host recorded for PR, or for the reviewed pull request."
+  (when-let* ((pr (or pr (and code-review-db--pullreq-id
+                              (code-review-db-get-pullreq)))))
+    (and (slot-boundp pr 'host) (oref pr host))))
+
+(defun code-review-gitlab--host (&optional pr)
+  "Return the Gitlab API host (\"HOST/api\") of PR.
+PR defaults to the pull request being reviewed.  Reviews started before
+hosts were recorded fall back to `code-review-gitlab-host'."
+  (or (code-review-gitlab--recorded-host pr) code-review-gitlab-host))
+
+(defun code-review-gitlab--graphql-host (&optional pr)
+  "Return the Gitlab GraphQL host of PR, like `code-review-gitlab--host'.
+Falls back to `code-review-gitlab-graphql-host'."
+  (or (code-review-gitlab--recorded-host pr) code-review-gitlab-graphql-host))
 
 (defun code-review-gitlab--project-id (pr)
   "Return the project ID for a PR."
@@ -95,7 +115,7 @@ where Forge stores it, and return the token string if found there."
   "Make a METHOD request for RESOURCE with PARAMS to the Gitlab API.
 ARGS are passed on to `ghub-request'.  This replaces `glab-request',
 which was removed from Ghub."
-  (let ((host (or host code-review-gitlab-host)))
+  (let ((host (or host (code-review-gitlab--host))))
     (apply #'ghub-request method resource params
            :forge 'gitlab
            :host host
@@ -114,14 +134,14 @@ which was removed from Ghub."
   "PUT RESOURCE with PARAMS; see `code-review-gitlab--request' for ARGS."
   (apply #'code-review-gitlab--request "PUT" resource params args))
 
-(defun code-review-gitlab--graphql (graphql variables callback)
-  "Make GRAPHQL call to GITLAB.
-Optionally using VARIABLES.  Provide HOST and CALLBACK fn."
+(defun code-review-gitlab--graphql (graphql variables callback &optional pr)
+  "Make GRAPHQL call to the Gitlab of PR, and call CALLBACK.
+Optionally using VARIABLES.  PR defaults to the reviewed pull request."
   (code-review-gitlab--request "POST" "/graphql" nil :payload (json-encode
                                                 `(("query" . ,graphql)
                                                   ,@(and variables `(("variables" ,@variables)))))
                 :auth code-review-auth-login-marker
-                :host code-review-gitlab-graphql-host
+                :host (code-review-gitlab--graphql-host pr)
                 :callback callback
                 :errorback #'code-review-gitlab-errback))
 
@@ -131,37 +151,43 @@ Optionally using VARIABLES.  Provide HOST and CALLBACK fn."
 (defun code-review-gitlab-fix-diff (pr-changes)
   "Get all PR-CHANGES and produce standard git diff.
 Unfortunately, Gitlab's API returns the elements of the diff in
-an object then we need to build the diff string ourselves here."
+an object then we need to build the diff string ourselves here.
+Gitlab sends no diff text for empty new files and for files whose diff
+is too large; those get only the extended headers, like git's output for
+an empty file."
   (string-remove-suffix
    "\n"
    (-reduce-from
     (lambda (acc c)
       (let-alist c
-        (let ((header1 (format "diff --git %s %s\n" .new_path .old_path))
-              (header2 (cond
-                        (.deleted_file
-                         (format "deleted file mode %s\n" .a_mode))
-                        (.new_file
-                         (format "new file mode %s\nindex 0000000000000000000000000000000000000000..1111\n" .b_mode))
-                        (.renamed_file)
-                        (t
-                         (format "index 1111..2222 %s\n" .a_mode))))
-              (header3 (cond
-                        (.deleted_file
-                         (format "--- %s\n+++ /dev/null\n" .old_path))
-                        (.new_file
-                         (format "--- /dev/null\n+++ %s\n" .new_path))
-                        (.renamed_file)
-                        (t
-                         (format "--- %s\n+++ %s\n"
-                                 .old_path
-                                 .new_path)))))
-          (format "%s%s%s%s%s"
-                  acc
-                  header1
-                  header2
-                  header3
-                  .diff))))
+        (let* ((diff (cond ((or (null .diff) (string-empty-p .diff)) nil)
+                           ((string-suffix-p "\n" .diff) .diff)
+                           (t (concat .diff "\n"))))
+               (header1 (format "diff --git %s %s\n" .old_path .new_path))
+               (header2 (cond
+                         (.deleted_file
+                          (format "deleted file mode %s\n" .a_mode))
+                         (.new_file
+                          (format "new file mode %s\nindex 0000000000000000000000000000000000000000..1111\n" .b_mode))
+                         (.renamed_file
+                          (concat (format "rename from %s\nrename to %s\n"
+                                          .old_path .new_path)
+                                  (and diff
+                                       (format "index 1111..2222 %s\n"
+                                               .b_mode))))
+                         (t
+                          (format "index 1111..2222 %s\n" .a_mode))))
+               (header3 (cond
+                         ((null diff) "")
+                         (.deleted_file
+                          (format "--- %s\n+++ /dev/null\n" .old_path))
+                         (.new_file
+                          (format "--- /dev/null\n+++ %s\n" .new_path))
+                         (t
+                          (format "--- %s\n+++ %s\n"
+                                  .old_path
+                                  .new_path)))))
+          (concat acc header1 header2 header3 diff))))
     ""
     pr-changes)))
 
@@ -333,7 +359,7 @@ The payload is used to send a MR review to Gitlab."
                     (oref gitlab number))
             nil
             :unpaginate t
-            :host code-review-gitlab-host
+            :host (code-review-gitlab--host gitlab)
             :auth code-review-auth-login-marker
             :callback callback
             :errorback #'code-review-gitlab-errback))
@@ -436,7 +462,8 @@ repository:project(fullPath: \"%s\") {
     (code-review-gitlab--graphql
      query
      nil
-     callback)))
+     callback
+     gitlab)))
 
 (cl-defmethod code-review-infos-deferred ((gitlab code-review-gitlab-repo) &optional fallback?)
   "Get PR infos from GITLAB.
@@ -479,7 +506,7 @@ Optionally sets FALLBACK? to get minimal query."
                         nil
                         :payload (a-alist 'body (oref reply body))
                         :auth code-review-auth-login-marker
-                        :host code-review-gitlab-host
+                        :host (code-review-gitlab--host pr)
                         :errorback #'code-review-gitlab-errback
                         :callback (lambda (&rest _)))))
          (oref replies replies)))
@@ -494,11 +521,11 @@ Optionally sets FALLBACK? to get minimal query."
         (lambda (err)
           (error "Got an error from the Gitlab Reply API %S!" err))))))
 
-(defun code-review-gitlab--user ()
-  "Get the Gitlab username, the way Ghub and Forge find it.
-Searching auth-sources for `code-review-gitlab-host' failed when the
-token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
-  (ghub--username code-review-gitlab-host 'gitlab))
+(defun code-review-gitlab--user (&optional pr)
+  "Get the Gitlab username for PR's host, the way Ghub and Forge find it.
+Searching auth-sources for the host failed when the token is stored
+under the REST endpoint (\"HOST/v4\"), as Forge does."
+  (ghub--username (code-review-gitlab--host pr) 'gitlab))
 
 (cl-defmethod code-review-send-review ((review code-review-submit-gitlab-review) callback)
   "Submit review comments given REVIEW and a CALLBACK fn."
@@ -518,7 +545,7 @@ token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
                            (oref pr number))
                    nil
                    :auth code-review-auth-login-marker
-                   :host code-review-gitlab-host
+                   :host (code-review-gitlab--host pr)
                    :payload (code-review-gitlab-fix-payload payload c)
                    :callback (lambda (&rest _)
                                (message "Review Comments successfully!")))))
@@ -535,9 +562,9 @@ token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
                                            (oref pr number))
                                    nil
                                    :auth code-review-auth-login-marker
-                                   :host code-review-gitlab-host
+                                   :host (code-review-gitlab--host pr)
                                    :payload `((sha . ,(a-get-in infos (list 'diffRefs 'headSha))))
-                                   :username (code-review-gitlab--user)))
+                                   :username (code-review-gitlab--user pr)))
         ("REQUEST_CHANGES"
          (error "Not supported in Gitlab")))
       (when feedback
@@ -546,7 +573,7 @@ token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
                                           (oref pr number))
                                   nil
                                   :auth code-review-auth-login-marker
-                                  :host code-review-gitlab-host
+                                  :host (code-review-gitlab--host pr)
                                   :payload `((body . ,feedback))))
       (message "Review successfully sent!"))
 
@@ -572,7 +599,7 @@ token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
                                (code-review-gitlab--project-id gitlab))
                        nil
                        :unpaginate t
-                       :host code-review-gitlab-host
+                       :host (code-review-gitlab--host gitlab)
                        :auth code-review-auth-login-marker
                        :noerror 'return)))
     (if (a-get res 'error)
@@ -591,7 +618,7 @@ token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
                       (oref gitlab number))
               nil
               :auth code-review-auth-login-marker
-              :host code-review-gitlab-host
+              :host (code-review-gitlab--host gitlab)
               :payload `((labels .,labels-str))
               :callback (lambda (&rest _) (funcall callback)))))
 
@@ -618,7 +645,7 @@ token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
                     (oref gitlab number))
             nil
             :auth code-review-auth-login-marker
-            :host code-review-gitlab-host
+            :host (code-review-gitlab--host gitlab)
             :payload `((title .,(oref gitlab title)))
             :callback (lambda (&rest _) (funcall callback))))
 
@@ -639,20 +666,22 @@ token is stored under the REST endpoint (\"HOST/v4\"), as Forge does."
 Return the blob URL if BLOB? is provided."
   (let ((sha (a-get-in (oref gitlab raw-infos) (list 'diffRefs 'headSha))))
     (if blob?
-        (format "https://gitlab.com/%s/%s/-/blob/%s/%s"
+        (format "https://%s/%s/%s/-/blob/%s/%s"
+                (string-remove-suffix "/api" (code-review-gitlab--host gitlab))
                 (oref gitlab owner)
                 (oref gitlab repo)
                 sha
                 filename)
       (format "https://%s/v4/projects/%s/repository/files/%s/raw?ref=%s"
-              code-review-gitlab-host
+              (code-review-gitlab--host gitlab)
               (code-review-gitlab--project-id gitlab)
               filename
               sha))))
 
 (cl-defmethod code-review-binary-file ((gitlab code-review-gitlab-repo) filename)
   "Get FILENAME from GITLAB."
-  (let* ((pwd (auth-source-pick-first-password :host code-review-gitlab-host))
+  (let* ((pwd (auth-source-pick-first-password
+               :host (code-review-gitlab--host gitlab)))
          (headers (format "--header 'PRIVATE-TOKEN: %s'" pwd))
          (url (code-review-binary-file-url gitlab filename)))
     (code-review-utils--fetch-binary-data url filename headers)))
@@ -664,7 +693,7 @@ Return the blob URL if BLOB? is provided."
                      (oref gitlab number))
              nil
              :auth code-review-auth-login-marker
-             :host code-review-gitlab-host
+             :host (code-review-gitlab--host gitlab)
              :payload (a-alist 'body comment-msg)
              :callback callback
              :errorback #'code-review-gitlab-errback))
@@ -684,7 +713,7 @@ Return the blob URL if BLOB? is provided."
                        (oref gitlab number))
                nil
                :auth code-review-auth-login-marker
-               :host code-review-gitlab-host
+               :host (code-review-gitlab--host gitlab)
                :payload (code-review-gitlab-fix-payload payload local-comment)
                :callback (lambda (&rest _)
                            (message "Review Comments successfully!")

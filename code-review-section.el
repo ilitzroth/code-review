@@ -1768,7 +1768,10 @@ If you want to provide a MSG for the end of the process."
               (code-review-utils--log
                "code-review--build-buffer"
                (prin1-to-string err))
-              (if (and (sequencep err) (string-prefix-p "BUG: Unknown extended header:" (-second-item err)))
+              (if (and (consp err)
+                       (stringp (-second-item err))
+                       (string-prefix-p "BUG: Unknown extended header:"
+                                        (-second-item err)))
                   (message "Your PR might have diffs too large. Currently not supported.")
                 (message "Got an error from your VC provider. Check `code-review-log-file'.")))))))))
 

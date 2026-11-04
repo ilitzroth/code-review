@@ -36,13 +36,17 @@
 (require 'forge-core)
 (require 'forge-github)
 
+(defvar code-review-gitlab-host) ; defined in code-review-gitlab.el
+
 (defcustom code-review-github-base-url "github.com"
   "Host used to identify PR URLs from Github."
   :type 'string
   :group 'code-review-github)
 
 (defcustom code-review-gitlab-base-url "gitlab.com"
-  "Host used to identify PR URLs from Gitlab."
+  "Host of the Gitlab whose API host is `code-review-gitlab-host'.
+Merge request URLs on any host are recognized; see
+`code-review-utils--gitlab-api-host'."
   :type 'string
   :group 'code-review-gitlab)
 
@@ -249,21 +253,35 @@ using COMMENTS."
 
 ;;; URL PARSE
 
+(defun code-review-utils--gitlab-api-host (host)
+  "Return the API host (\"HOST/api\") of the Gitlab whose web host is HOST.
+That is `code-review-gitlab-host' for `code-review-gitlab-base-url',
+else the API host of HOST's entry in `forge-alist', else HOST/api."
+  (cond
+   ((equal host code-review-gitlab-base-url) code-review-gitlab-host)
+   ((when-let* (((boundp 'forge-alist))
+                (entry (seq-find (lambda (e) (equal (nth 2 e) host))
+                                 forge-alist)))
+      (string-remove-suffix "/v4" (nth 1 entry))))
+   (t (concat host "/api"))))
+
 (defun code-review-utils-pr-from-url (url)
   "Extract a pr alist from a pull request URL."
   (let* ((http-or-https (lambda (url) (if (member url ghub-insecure-hosts) "http://%s" "https://%s")))
-	 (gitlab-http (funcall http-or-https code-review-gitlab-base-url))
 	 (github-http (funcall http-or-https code-review-github-base-url)))
     (cond
-     ((string-prefix-p (format gitlab-http code-review-gitlab-base-url) url)
-      (save-match-data
-	(and (string-match (format (concat gitlab-http "/\\([^/]*\\)/\\(.*\\)/-/merge_requests/\\([0-9]+\\)")
-                                   code-review-gitlab-base-url)
-                           url)
-             (a-alist 'num (match-string 3 url)
-                      'repo (replace-regexp-in-string "/" "%2F" (match-string 2 url))
-                      'owner (match-string 1 url)
+     ((save-match-data
+        (and (string-match
+              (concat "\\`https?://\\([^/]+\\)/\\([^/]+\\)/\\(.+\\)"
+                      "/-/merge_requests/\\([0-9]+\\)")
+              url)
+             (a-alist 'num (match-string 4 url)
+                      'repo (replace-regexp-in-string
+                             "/" "%2F" (match-string 3 url))
+                      'owner (match-string 2 url)
                       'forge 'gitlab
+                      'host (code-review-utils--gitlab-api-host
+                             (match-string 1 url))
                       'url url))))
      ((string-prefix-p (format github-http code-review-github-base-url) url)
       (save-match-data
@@ -289,7 +307,8 @@ using COMMENTS."
       (code-review-db--pullreq-create
        (code-review-gitlab-repo :owner .owner
                                 :repo .repo
-                                :number .num)))
+                                :number .num
+                                :host .host)))
      (t
       (error "Forge not supported")))))
 
@@ -357,7 +376,9 @@ Return a value between 0 and 1."
                        ((forge-gitlab-repository-p repo)
                         'gitlab)
                        (t
-                        (error "Backend not supported!")))))))
+                        (error "Backend not supported!")))
+               ;; Forge's API host is "HOST/api/v4"; ours is "HOST/api".
+               'host (string-remove-suffix "/v4" (oref repo apihost))))))
 
 ;;; LOG
 

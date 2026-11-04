@@ -118,5 +118,9 @@
               :to-equal `((old-line . 29)
                           (new-line . 20))))))
 
+(describe "code-review-parse-hunk-table on Gitlab's empty diffs"
+  (it "returns no rows for an empty diff"
+    (expect (code-review-parse-hunk-table "") :to-be nil)))
+
 (provide 'code-review-parse-diff-test)
 ;;; code-review-parse-diff-test.el ends here

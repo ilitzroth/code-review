@@ -100,7 +100,7 @@
    (number              :initarg :number)
    (description         :initform nil)
    (title               :initform nil)
-   (host                :initform nil)
+   (host                :initarg :host :initform nil)
    (sha                 :initform nil)
    (feedback            :initform nil)
    (state               :initform nil)

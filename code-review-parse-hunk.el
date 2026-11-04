@@ -46,7 +46,10 @@
 (defun code-review-parse-hunk-table (hunkstring)
   "Table from HUNKSTRING.
 Each row has the old line, new line, added/deleted line and relative pos."
-  (if (string-prefix-p "Binary files" hunkstring)
+  ;; Gitlab sends an empty diff for empty new files and for files whose
+  ;; diff is too large to show; like binary files, they have no hunks.
+  (if (or (string-empty-p hunkstring)
+          (string-prefix-p "Binary files" hunkstring))
       nil
     (let* ((difflines (split-string hunkstring "\n"))
            (relative 0)
