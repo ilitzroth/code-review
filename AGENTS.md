@@ -35,7 +35,10 @@ All source files are at the top level:
 - `code-review-actions.el`: interactive commands and the transient menu.
 - `code-review-parse-hunk.el`, `code-review-utils.el`, `code-review-faces.el`:
   helpers.
-- `test/`: buttercup specs. `docs/`: user documentation.
+- `test/`: buttercup specs.
+- `docs/code-review.texi`: the user manual. `code-review.info` and `dir` at the
+  top level are built from it and committed, so that package.el finds the manual
+  in the package directory.
 
 ## Environment
 
@@ -84,6 +87,19 @@ Known state of the suite:
   `code-review-db--comment-already-written?` to return `t`; current dash makes
   `-contains-p` return the matching tail of the list instead, which callers
   treat the same way.
+
+## Manual
+
+After changing `docs/code-review.texi`, rebuild the Info file and the `dir`
+file, and commit them with it:
+
+```sh
+makeinfo --no-split docs/code-review.texi -o code-review.info &&
+rm -f dir && install-info code-review.info dir
+```
+
+`makeinfo` must not print warnings. Document user-visible changes (commands,
+keys, options, forge support) in the manual, not in Markdown files.
 
 ## Conventions
 

@@ -1,0 +1,1025 @@
+This is code-review.info, produced by makeinfo version 7.1 from
+code-review.texi.
+
+This manual is for Code Review 0.0.7, an Emacs package for reviewing
+Github pull requests and Gitlab merge requests.
+
+   Copyright © 2021-2022 Wanderson Ferreira and contributors.
+
+     You can redistribute this document and/or modify it under the terms
+     of the GNU General Public License as published by the Free Software
+     Foundation, either version 3 of the License, or (at your option)
+     any later version.
+
+     This document is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     General Public License for more details.
+INFO-DIR-SECTION Emacs
+START-INFO-DIR-ENTRY
+* Code Review: (code-review).  Review pull and merge requests in Emacs.
+END-INFO-DIR-ENTRY
+
+
+File: code-review.info,  Node: Top,  Next: Introduction,  Up: (dir)
+
+Code Review User Manual
+***********************
+
+Code Review lets you review pull requests on Github and merge requests
+on Gitlab without leaving Emacs: read the diff and the discussion, write
+comments and replies, and approve or request changes.  Its buffers are
+built with Magit's sections and its commands are gathered in a Transient
+menu.
+
+   This manual is for Code Review 0.0.7, an Emacs package for reviewing
+Github pull requests and Gitlab merge requests.
+
+   Copyright © 2021-2022 Wanderson Ferreira and contributors.
+
+     You can redistribute this document and/or modify it under the terms
+     of the GNU General Public License as published by the Free Software
+     Foundation, either version 3 of the License, or (at your option)
+     any later version.
+
+     This document is distributed in the hope that it will be useful,
+     but WITHOUT ANY WARRANTY; without even the implied warranty of
+     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+     General Public License for more details.
+
+* Menu:
+
+* Introduction::
+* Installation::
+* Getting Started::
+* The Review Buffer::
+* Comments and Replies::
+* Submitting a Review::
+* Editing the Pull Request::
+* Reactions::
+* Merging::
+* Saving and Resuming Reviews::
+* Visiting Files::
+* Forge Support::
+* Gitlab::
+* Github::
+* Customization::
+* Troubleshooting::
+* Extending Code Review::
+* Acknowledgments::
+* Command and Function Index::
+* Key Index::
+* Variable Index::
+
+-- The Detailed Node Listing --
+
+Gitlab
+
+* Gitlab Authentication::
+* Gitlab Instances::
+* Approving on Gitlab::
+
+Github
+
+* Github Authentication::
+* Github Enterprise::
+
+Customization
+
+* Options::
+* Key Binding Suggestions::
+* Doom Emacs::
+
+
+File: code-review.info,  Node: Introduction,  Next: Installation,  Prev: Top,  Up: Top
+
+1 Introduction
+**************
+
+Code Review shows a pull request in a ‘*Code Review*’ buffer: its header
+(author, title, state, branches, labels, assignees, reviewers), its
+commits, its description, the conversation and the diff of every changed
+file, with the review comments placed on the lines they were made on.
+Outdated comments are shown with the diff hunk they were made on.
+
+   From that buffer you can:
+
+   • read and reply to comments, and add comments to any line of the
+     diff, including code suggestions;
+   • approve, request changes or comment, with an overall feedback
+     message;
+   • set labels, assignees, milestones, reviewers, the title and the
+     description;
+   • react to comments with emoji, and promote a comment to a new issue;
+   • review a single commit, save an unfinished review and resume it
+     later;
+   • visit a changed file in your local clone, or a binary file in
+     Dired.
+
+   Not every feature is available on every forge; *note Forge Support::.
+
+1.1 About this fork
+===================
+
+This is a fork of <https://github.com/wandersoncferreira/code-review>,
+which is unmaintained since December 2022 and no longer loads with
+current versions of its dependencies.  The fork's ‘port’ branch:
+
+   • ports the database layer to current EmacSQL and closql, and the
+     Gitlab requests to current Ghub, which dropped ‘glab-get’ and
+     similar functions;
+   • removes Bitbucket support;
+   • fixes Gitlab replies, approval and review feedback against current
+     Gitlab, and reviews each merge request on its own Gitlab instance.
+
+   Only Gitlab has been tested since the port, on gitlab.com and on a
+self-hosted instance.  The Github code compiles but is untested.
+
+
+File: code-review.info,  Node: Installation,  Next: Getting Started,  Prev: Introduction,  Up: Top
+
+2 Installation
+**************
+
+Do not install ‘code-review’ from MELPA: that is the unported upstream
+version.  Install the fork's ‘port’ branch with ‘package-vc’, which also
+installs the dependencies from the package archives.  MELPA must be in
+‘package-archives’.
+
+     (package-vc-install
+      '(code-review :url "https://github.com/ilitzroth/code-review"
+                    :branch "port"))
+
+   Or, from a local clone:
+
+     (package-vc-install-from-checkout "~/path/to/code-review" "code-review")
+
+   This manual comes with the package as ‘code-review.info’, with a
+‘dir’ file next to it, at the top of the repository.  When the package
+is installed with ‘package-vc-install’, the package directory is the
+clone, so Emacs adds it to ‘Info-directory-list’ and the manual appears
+in ‘C-h i’.  A package installed with ‘package-vc-install-from-checkout’
+lives in a separate directory that only loads the clone's autoloads, so
+add the clone yourself:
+
+     (with-eval-after-load 'info
+       (add-to-list 'Info-directory-list "~/path/to/code-review"))
+
+   Then configure access to your forge: *note Gitlab::, or *note
+Github::.
+
+
+File: code-review.info,  Node: Getting Started,  Next: The Review Buffer,  Prev: Installation,  Up: Top
+
+3 Getting Started
+*****************
+
+There are two ways to open a review:
+
+‘M-x code-review-start’
+     Prompt for the URL of a pull request or merge request and open it.
+
+‘M-x code-review-forge-pr-at-point’
+     Open the pull request at point in a Forge or Magit buffer, or the
+     one shown in a Forge topic buffer.  *Note Key Binding
+     Suggestions::, for a binding.
+
+   The basic workflow:
+
+  1. Move to a line of the diff and press ‘RET’ to write a comment on
+     it.  *Note Comments and Replies::.
+  2. Press ‘RET’ on a comment that is already on the forge to reply to
+     it, or on one of your local comments to edit it.
+  3. Press ‘r s f’ to write your overall feedback.
+  4. Press ‘r a’ to approve, ‘r r’ to request changes (Github only) or
+     ‘r c’ to send your comments without a verdict.  *Note Submitting a
+     Review::.
+
+   Your comments stay local until you submit the review, so you can
+write them in any order and change them first.
+
+
+File: code-review.info,  Node: The Review Buffer,  Next: Comments and Replies,  Prev: Getting Started,  Up: Top
+
+4 The Review Buffer
+*******************
+
+The review buffer is a Magit section buffer: ‘TAB’ folds and unfolds a
+section, ‘n’ and ‘p’ move between sections and ‘M-n’ and ‘M-p’ between
+sibling sections, as in Magit.  It has these sections, from top to
+bottom:
+
+   • the header: author, title, state, branches, milestone, labels,
+     projects, draft state, assignees, suggested reviewers and
+     reviewers;
+   • the commits, with their CI state on Github;
+   • the description;
+   • ‘Your Review Feedback’, the overall message of your review;
+   • the conversation: comments that are not on a line of the diff;
+   • the files changed, each with its diff and the comments on its
+     lines.
+
+   Many header lines are commands: press ‘RET’ on the title, the labels,
+the milestone or the assignee to change them (*note Editing the Pull
+Request::), on an author to visit their profile, and on a suggested
+reviewer to request their review.
+
+‘r’
+     Show the Transient menu with all review commands
+     (‘code-review-transient-api’).
+
+‘RET’
+     On a diff line, write a comment on it; on a comment, reply to it;
+     on one of your local comments, edit it
+     (‘code-review-comment-add-or-edit’).
+
+‘C-c C-s’
+     Write a code suggestion for the diff line at point
+     (‘code-review-comment-code-suggestion’).  Github only.
+
+‘C-c RET’
+     Write a comment on the diff line at point and send it right away,
+     outside a review
+     (‘code-review-submit-single-diff-comment-at-point’).
+
+‘C-c C-k’
+     Delete the local comment or the feedback at point.
+
+‘C-c C-r’
+     Add a reaction to the comment or description at point (*note
+     Reactions::).
+
+‘C-c C-n’
+     Promote the comment at point to a new issue.
+
+‘C-RET’
+     Visit the file at point in your local clone (*note Visiting
+     Files::).
+
+‘G’
+     Reload the pull request from the forge (‘code-review-reload’).
+
+   The commands ‘code-review-toggle-display-all-comments’,
+‘code-review-toggle-display-top-level-comments’ and
+‘code-review-toggle-display-diff-comments’ hide or show comments, which
+helps when reading the diff of a busy pull request.
+
+   ‘code-review-comment-jump-next’ and
+‘code-review-comment-jump-previous’ move to the next and previous
+comment; they have no default binding (*note Key Binding Suggestions::).
+
+   Press ‘RET’ on a commit to review that commit alone, in a separate
+‘*Code Review Commit*’ buffer (‘code-review-commit-at-point’).  Press
+‘b’ there to go back to the whole pull request.
+
+
+File: code-review.info,  Node: Comments and Replies,  Next: Submitting a Review,  Prev: The Review Buffer,  Up: Top
+
+5 Comments and Replies
+**********************
+
+Writing a comment, a reply or the feedback opens a ‘*Code Review
+Comment*’ buffer in Markdown mode:
+
+‘C-c C-c’
+     Save the comment locally (‘code-review-comment-commit’).  Comments
+     written with ‘C-c RET’ and ‘r s c’ are sent right away instead.
+
+‘C-c C-k’
+     Cancel (‘code-review-comment-quit’).
+
+‘C-c @’
+     Insert a mention of a user, chosen with completion
+     (‘code-review-input-mention-user-at-point’).
+
+   Saved comments are shown in the review buffer as local comments.
+They are sent with the review (*note Submitting a Review::).  Press
+‘RET’ on a local comment to edit it, and ‘C-c C-k’ to delete it.
+
+   ‘C-c C-s’ on a diff line opens the comment buffer with that line in a
+‘suggestion’ block, which you change into the code you suggest.  Github
+shows it with a button to apply the suggestion.  This is not supported
+on Gitlab yet.
+
+
+File: code-review.info,  Node: Submitting a Review,  Next: Editing the Pull Request,  Prev: Comments and Replies,  Up: Top
+
+6 Submitting a Review
+*********************
+
+Press ‘r’ in the review buffer for the Transient menu.  Its ‘Review’
+group sends your local comments and replies, the feedback and a verdict:
+
+‘r a’
+     Approve (‘code-review-submit-approve’).
+
+‘r r’
+     Request changes (‘code-review-submit-request-changes’).  Github
+     only.
+
+‘r c’
+     Send the comments without a verdict
+     (‘code-review-submit-comments’).
+
+   The feedback is the overall message of the review.  Set it with ‘r s
+f’ (‘code-review-set-feedback’) or ‘RET’ on ‘Your Review Feedback’, and
+delete it with ‘C-c C-k’ there (‘code-review-delete-feedback’).  Github
+requires a feedback message to request changes.
+
+   The ‘Fast track’ group sends things without a review:
+
+‘r l’
+     Approve with the message in ‘code-review-lgtm-message’
+     (‘code-review-submit-lgtm’).
+
+‘r p’
+     Send only your replies to existing comments
+     (‘code-review-submit-only-replies’).
+
+‘r s c’
+     Write a comment on the conversation and send it right away
+     (‘code-review-submit-single-top-level-comment’).
+
+‘r s C’
+     Write a comment on the diff line at point and send it right away
+     (‘code-review-submit-single-diff-comment-at-point’).
+
+   Set ‘code-review-always-restrict-approval?’ to non-‘nil’ to refuse
+approving a pull request whose CI state is not successful (Github).
+
+
+File: code-review.info,  Node: Editing the Pull Request,  Next: Reactions,  Prev: Submitting a Review,  Up: Top
+
+7 Editing the Pull Request
+**************************
+
+The ‘Setters’ group of the Transient menu changes the pull request
+itself.  These changes are sent right away.
+
+‘r s r’
+     Request reviews (‘code-review-request-reviews’).
+
+‘r s y’
+     Assign yourself (‘code-review-set-yourself-assignee’).
+
+‘r s a’
+     Set the assignee (‘code-review-set-assignee’).
+
+‘r s m’
+     Set the milestone (‘code-review-set-milestone’).  Github only sets
+     it for users with push access, and silently ignores it otherwise.
+
+‘r s l’
+     Set the labels (‘code-review-set-label’).
+
+‘r s t’
+     Edit the title (‘code-review-set-title’).
+
+‘r s d’
+     Edit the description (‘code-review-set-description’).
+
+   Labels, reviewers and other fields that take several values are read
+with ‘completing-read-multiple’: separate the values with commas, and
+press ‘TAB’ to see the candidates.  An empty input removes all labels.
+
+
+File: code-review.info,  Node: Reactions,  Next: Merging,  Prev: Editing the Pull Request,  Up: Top
+
+8 Reactions
+***********
+
+On Github you can react with emoji to the description and to any
+comment.
+
+   • Press ‘C-c C-r’ on a comment or the description to add a reaction.
+   • Press ‘RET’ on an emoji to add your reaction or remove it.
+
+   Each kind of comment has its own command, bound in its own keymap.
+To use another key, rebind them:
+
+     (define-key code-review-description-section-map (kbd "C-c C-r")
+       #'code-review-description-reaction-at-point)
+     (define-key code-review-code-comment-section-map (kbd "C-c C-r")
+       #'code-review-code-comment-reaction-at-point)
+     (define-key code-review-comment-section-map (kbd "C-c C-r")
+       #'code-review-conversation-reaction-at-point)
+
+
+File: code-review.info,  Node: Merging,  Next: Saving and Resuming Reviews,  Prev: Reactions,  Up: Top
+
+9 Merging
+*********
+
+The ‘Merge’ group of the Transient menu merges the pull request on
+Github: ‘r m m’ with a merge commit (‘code-review-merge-merge’), ‘r m r’
+by rebasing (‘code-review-merge-rebase’) and ‘r m s’ by squashing
+(‘code-review-merge-squash’).
+
+   This is experimental.  The commit title and message are taken from
+the pull request's title and description, and cannot be changed.
+
+
+File: code-review.info,  Node: Saving and Resuming Reviews,  Next: Visiting Files,  Prev: Merging,  Up: Top
+
+10 Saving and Resuming Reviews
+******************************
+
+Local comments live in a database, so a review can be left unfinished:
+
+‘r C-c C-s’
+     Save the review (‘code-review-save-unfinished-review’).
+
+‘r C-c C-r’
+     Choose a saved review and open it again
+     (‘code-review-open-unfinished-review’).
+
+‘M-x code-review-recover-unfinished-review’
+     Open the saved review of the pull request at a URL.
+
+   The database is ‘code-review-db-database-file’, by default
+‘code-review-db-file.sqlite’ in ‘user-emacs-directory’.
+
+
+File: code-review.info,  Node: Visiting Files,  Next: Forge Support,  Prev: Saving and Resuming Reviews,  Up: Top
+
+11 Visiting Files
+*****************
+
+‘C-RET’ (‘code-review-visit-file-at-point’) on a diff line or a file
+heading opens the file in your local clone of the repository, the
+worktree Forge knows for it, at the line at point.  When the clone is
+not at the pull request's head commit, it offers to check out the pull
+request's branch there, but only if the clone has no uncommitted
+changes.  Then the code you read, and tools like Eglot, see the pull
+request's version.
+
+   ‘RET’ on a binary file, such as an image, downloads it to
+‘code-review-download-dir’ and opens that directory in Dired.  ‘C-c C-v’
+opens the file on the forge instead.
+
+
+File: code-review.info,  Node: Forge Support,  Next: Gitlab,  Prev: Visiting Files,  Up: Top
+
+12 Forge Support
+****************
+
+Features supported by each forge:
+
+Feature                                Github         Gitlab
+---------------------------------------------------------------
+Add comments                           yes            yes
+Reply to comments                      yes            yes
+Send only replies                      yes            yes
+Send a review with comments            yes            yes
+Approve                                yes            yes
+Request changes                        yes            no
+Send a single comment                  yes            yes
+Send a single diff comment             yes            yes
+Code suggestions                       yes            no
+Set labels                             yes            yes
+Set the assignee                       yes            no
+Set the milestone                      yes            no
+Edit the title                         yes            yes
+Edit the description                   yes            no
+Request reviewers                      yes            no
+Merge                                  experimental   no
+Reactions                              yes            no
+Promote a comment to an issue          yes            no
+Save and resume an unfinished review   yes            yes
+Get and visit binary files             yes            yes
+CI state of commits                    yes            no
+
+   Commands for features a forge doesn't support report ‘Not supported
+in Gitlab yet.’ rather than failing.
+
+
+File: code-review.info,  Node: Gitlab,  Next: Github,  Prev: Forge Support,  Up: Top
+
+13 Gitlab
+*********
+
+* Menu:
+
+* Gitlab Authentication::
+* Gitlab Instances::
+* Approving on Gitlab::
+
+
+File: code-review.info,  Node: Gitlab Authentication,  Next: Gitlab Instances,  Up: Gitlab
+
+13.1 Authentication
+===================
+
+If you use Forge, reuse its token and skip the rest of this section:
+
+     (setq code-review-auth-login-marker 'forge)
+
+   Otherwise, create a personal access token on Gitlab with the ‘api’
+scope, and add a line with your login and the token to your auth source
+file, usually ‘~/.authinfo.gpg’:
+
+     machine gitlab.com/api login yourlogin^code-review password TOKEN
+
+   The token is also found when the line names the REST endpoint
+instead, ‘gitlab.com/api/v4’, which is where Forge stores its tokens.
+
+
+File: code-review.info,  Node: Gitlab Instances,  Next: Approving on Gitlab,  Prev: Gitlab Authentication,  Up: Gitlab
+
+13.2 Gitlab Instances
+=====================
+
+Each review uses the Gitlab instance of its merge request, so reviews on
+gitlab.com and on self-hosted instances work side by side without any
+configuration:
+
+   • From Forge (‘code-review-forge-pr-at-point’), the API host is the
+     one Forge uses for the repository.
+   • From a URL (‘code-review-start’), any
+     ‘https://HOST/.../-/merge_requests/N’ URL is recognized.  The API
+     host is the one in HOST's entry in ‘forge-alist’, or else
+     ‘HOST/api’.
+
+   Ghub finds your username in the Git variable ‘gitlab.HOST.user’, or
+else ‘gitlab.user’, as for Forge:
+
+     git config --global gitlab.git.example.com.user yourlogin
+
+   The options ‘code-review-gitlab-host’ and
+‘code-review-gitlab-graphql-host’ are only used for reviews saved before
+the host was recorded, and for an instance whose API host is not
+‘HOST/api’ and not in ‘forge-alist’.  In that case set them, with
+‘code-review-gitlab-base-url’, for that instance:
+
+     (setq code-review-gitlab-base-url "git.example.com"       ; MR URLs
+           code-review-gitlab-host "git.example.com/api"       ; REST
+           code-review-gitlab-graphql-host "git.example.com/api"); GraphQL
+
+   For an instance served over HTTP rather than HTTPS, add it to
+‘ghub-insecure-hosts’:
+
+     (setq ghub-insecure-hosts '("git.example.com"))
+
+
+File: code-review.info,  Node: Approving on Gitlab,  Prev: Gitlab Instances,  Up: Gitlab
+
+13.3 Approving on Gitlab
+========================
+
+‘r a’ approves the merge request.  Gitlab's approve API takes no
+message, so the feedback set with ‘r s f’ is posted as a separate
+comment next to the approval.
+
+   A Gitlab project can require users to enter their password to approve
+a merge request; then you are asked for your username and password.
+
+   Requesting changes (‘r r’) is not supported on Gitlab.
+
+
+File: code-review.info,  Node: Github,  Next: Customization,  Prev: Gitlab,  Up: Top
+
+14 Github
+*********
+
+The Github code has not been tested since the port.
+
+* Menu:
+
+* Github Authentication::
+* Github Enterprise::
+
+
+File: code-review.info,  Node: Github Authentication,  Next: Github Enterprise,  Up: Github
+
+14.1 Authentication
+===================
+
+Code Review needs a Github token to fetch pull requests and submit
+reviews for you.  With ‘code-review-auth-login-marker’ set to ‘forge’,
+it uses Forge's token.  Otherwise:
+
+  1. Create a personal access token on Github with the ‘repo’ scope.  On
+     Github Enterprise, also give it the ‘read:discussion’ and
+     ‘write:discussion’ scopes.
+  2. Add a line with your login and the token to your auth source file,
+     usually ‘~/.authinfo.gpg’:
+
+          machine api.github.com login yourlogin^code-review password TOKEN
+
+
+File: code-review.info,  Node: Github Enterprise,  Prev: Github Authentication,  Up: Github
+
+14.2 Github Enterprise
+======================
+
+On Github Enterprise, the token must be in your auth source under each
+host and path Code Review uses.  For example, for ‘ghe.example.com’:
+
+     machine ghe.example.com             login yourlogin^code-review password TOKEN
+     machine ghe.example.com/api         login yourlogin^code-review password TOKEN
+     machine ghe.example.com/api/v3      login yourlogin^code-review password TOKEN
+     machine ghe.example.com/api/graphql login yourlogin^code-review password TOKEN
+
+   Then set the hosts.  ‘/graphql’ is appended to
+‘code-review-github-graphql-host’ automatically.
+‘code-review-github-base-url’ is only needed to start reviews from a URL
+with ‘code-review-start’.
+
+     (setq code-review-github-host "ghe.example.com/api/v3"
+           code-review-github-graphql-host "ghe.example.com/api"
+           code-review-github-base-url "ghe.example.com")
+
+   Code Review also needs to know your username on the instance:
+
+     git config --global github.ghe.example.com.user yourlogin
+     git config --global github.ghe.example.com/api.user yourlogin
+     git config --global github.ghe.example.com/api/v3.user yourlogin
+     git config --global github.ghe.example.com/api/graphql.user yourlogin
+
+   To also review pull requests on github.com, keep those projects under
+one directory and reset the hosts there in ‘.dir-locals.el’:
+
+     ((nil . ((code-review-github-base-url . "github.com")
+              (code-review-github-graphql-host . "api.github.com")
+              (code-review-github-host . "api.github.com"))))
+
+
+File: code-review.info,  Node: Customization,  Next: Troubleshooting,  Prev: Github,  Up: Top
+
+15 Customization
+****************
+
+* Menu:
+
+* Options::
+* Key Binding Suggestions::
+* Doom Emacs::
+
+
+File: code-review.info,  Node: Options,  Next: Key Binding Suggestions,  Up: Customization
+
+15.1 Options
+============
+
+All options are in the customization group ‘code-review’, with its
+subgroups ‘code-review-github’ and ‘code-review-gitlab’.
+
+‘code-review-auth-login-marker’
+     The symbol after ‘^’ in the login of your auth source entries.  The
+     default is ‘code-review’; set it to ‘forge’ to use Forge's tokens.
+
+‘code-review-fill-column’
+     The column at which comments are wrapped; default 80.
+
+‘code-review-new-buffer-window-strategy’
+     The function that shows a new review buffer; default
+     ‘switch-to-buffer-other-window’.
+
+‘code-review-buffer-name’
+‘code-review-commit-buffer-name’
+‘code-review-comment-buffer-name’
+     The names of the review, commit and comment buffers.
+
+‘code-review-section-indent-width’
+     The indentation of nested sections; default 1.
+
+‘code-review-section-image-scaling’
+     The scaling of images shown in the buffer; default 0.8.
+
+‘code-review-lgtm-message’
+     The message of ‘r l’; default ‘LGTM! :thumbsup:’.
+
+‘code-review-always-restrict-approval?’
+     If non-‘nil’, refuse approving a pull request with a failing CI
+     state.
+
+‘code-review-download-dir’
+     The directory binary files are downloaded to; default
+     ‘/tmp/code-review/’.
+
+‘code-review-db-database-file’
+     The database of reviews and local comments.
+
+‘code-review-log-file’
+     The file errors are logged to; *note Troubleshooting::.
+
+‘code-review-log-raw-request-responses’
+     If non-‘nil’, also log the raw responses of the forge.
+
+‘code-review-headers-hook’
+‘code-review-sections-hook’
+‘code-review-sections-commit-hook’
+     The functions that insert the header lines and the sections of the
+     review buffer and of the commit buffer.  Remove a function to hide
+     its section.
+
+‘code-review-comment-buffer-msg’
+‘code-review-comment-feedback-msg’
+‘code-review-comment-single-comment-msg’
+‘code-review-comment-suggestion-msg’
+     The help texts at the top of the comment buffer.
+
+   The forge hosts are described in *note Gitlab Instances:: and *note
+Github Enterprise::.
+
+   To show emoji such as ‘:thumbsup:’ as symbols, enable ‘emojify-mode’:
+
+     (add-hook 'code-review-mode-hook #'emojify-mode)
+
+
+File: code-review.info,  Node: Key Binding Suggestions,  Next: Doom Emacs,  Prev: Options,  Up: Customization
+
+15.2 Key Binding Suggestions
+============================
+
+Bind ‘code-review-forge-pr-at-point’ in Forge's buffers:
+
+     (with-eval-after-load 'forge
+       (define-key forge-topic-mode-map (kbd "C-c r")
+         #'code-review-forge-pr-at-point)
+       (define-key forge-pullreq-section-map (kbd "C-c r")
+         #'code-review-forge-pr-at-point))
+
+   Delete local comments and the feedback with ‘k’:
+
+     (define-key code-review-feedback-section-map (kbd "k")
+       #'code-review-section-delete-comment)
+     (define-key code-review-local-comment-section-map (kbd "k")
+       #'code-review-section-delete-comment)
+     (define-key code-review-reply-comment-section-map (kbd "k")
+       #'code-review-section-delete-comment)
+
+   Move between comments with ‘C-c C-n’ and ‘C-c C-p’:
+
+     (define-key code-review-mode-map (kbd "C-c C-n")
+       #'code-review-comment-jump-next)
+     (define-key code-review-mode-map (kbd "C-c C-p")
+       #'code-review-comment-jump-previous)
+
+   The submit commands, such as ‘code-review-submit-approve’, can also
+be bound directly, but the Transient menu shows what is available.
+
+
+File: code-review.info,  Node: Doom Emacs,  Prev: Key Binding Suggestions,  Up: Customization
+
+15.3 Doom Emacs
+===============
+
+With Doom's ‘workspaces’ module, the review buffer is not added to the
+current workspace.  Add it with:
+
+     (add-hook 'code-review-mode-hook
+               (lambda () (persp-add-buffer (current-buffer))))
+
+
+File: code-review.info,  Node: Troubleshooting,  Next: Extending Code Review,  Prev: Customization,  Up: Top
+
+16 Troubleshooting
+******************
+
+When opening a review fails, you see ‘Got an error from your VC
+provider’ and the error is appended to ‘code-review-log-file’, by
+default ‘code-review-error.log’ in ‘user-emacs-directory’.  Set
+‘code-review-log-raw-request-responses’ to ‘t’ to also log the raw
+responses of the forge, which shows what it sent.
+
+‘Cannot determine username’
+     Your username on that instance is not in Git; *note Gitlab
+     Instances::, or *note Github Enterprise::.
+
+‘Required Gitlab token’ or ‘Required Github token’
+     No token was found in your auth source; *note Gitlab
+     Authentication::, or *note Github Authentication::.
+
+‘Your PR might have diffs too large’
+     Magit could not parse the diff of the pull request.
+
+
+File: code-review.info,  Node: Extending Code Review,  Next: Acknowledgments,  Prev: Troubleshooting,  Up: Top
+
+17 Extending Code Review
+************************
+
+Each forge is a class with methods for the generic functions in
+‘code-review-interfaces.el’: fetching the diff, the infos and the
+comments, and sending reviews, comments, labels and so on.  See
+‘code-review-gitlab.el’ for an example.
+
+
+File: code-review.info,  Node: Acknowledgments,  Next: Command and Function Index,  Prev: Extending Code Review,  Up: Top
+
+18 Acknowledgments
+******************
+
+Thanks to Laurent Charignon for the github-review
+(https://github.com/charignon/github-review) package, on which Code
+Review builds, and to Ag Ibragimov for the idea of using ‘magit-section’
+for its interface.
+
+
+File: code-review.info,  Node: Command and Function Index,  Next: Key Index,  Prev: Acknowledgments,  Up: Top
+
+Appendix A Command and Function Index
+*************************************
+
+ [index ]
+* Menu:
+
+* code-review-code-comment-reaction-at-point: Reactions.       (line 12)
+* code-review-comment-add-or-edit:       The Review Buffer.    (line 26)
+* code-review-comment-code-suggestion:   The Review Buffer.    (line 26)
+* code-review-comment-commit:            Comments and Replies. (line  6)
+* code-review-comment-jump-next:         The Review Buffer.    (line 66)
+* code-review-comment-jump-previous:     The Review Buffer.    (line 66)
+* code-review-comment-quit:              Comments and Replies. (line  6)
+* code-review-commit-at-point:           The Review Buffer.    (line 70)
+* code-review-conversation-reaction-at-point: Reactions.       (line 12)
+* code-review-delete-feedback:           Submitting a Review.  (line 20)
+* code-review-description-reaction-at-point: Reactions.        (line 12)
+* code-review-forge-pr-at-point:         Getting Started.      (line  6)
+* code-review-input-mention-user-at-point: Comments and Replies.
+                                                               (line  6)
+* code-review-merge-merge:               Merging.              (line  6)
+* code-review-merge-rebase:              Merging.              (line  6)
+* code-review-merge-squash:              Merging.              (line  6)
+* code-review-open-unfinished-review:    Saving and Resuming Reviews.
+                                                               (line  6)
+* code-review-recover-unfinished-review: Saving and Resuming Reviews.
+                                                               (line  6)
+* code-review-reload:                    The Review Buffer.    (line 26)
+* code-review-request-reviews:           Editing the Pull Request.
+                                                               (line  9)
+* code-review-save-unfinished-review:    Saving and Resuming Reviews.
+                                                               (line  6)
+* code-review-set-assignee:              Editing the Pull Request.
+                                                               (line  9)
+* code-review-set-description:           Editing the Pull Request.
+                                                               (line  9)
+* code-review-set-feedback:              Submitting a Review.  (line 20)
+* code-review-set-label:                 Editing the Pull Request.
+                                                               (line  9)
+* code-review-set-milestone:             Editing the Pull Request.
+                                                               (line  9)
+* code-review-set-title:                 Editing the Pull Request.
+                                                               (line  9)
+* code-review-set-yourself-assignee:     Editing the Pull Request.
+                                                               (line  9)
+* code-review-start:                     Getting Started.      (line  6)
+* code-review-submit-approve:            Submitting a Review.  (line  9)
+* code-review-submit-comments:           Submitting a Review.  (line  9)
+* code-review-submit-lgtm:               Submitting a Review.  (line 27)
+* code-review-submit-only-replies:       Submitting a Review.  (line 27)
+* code-review-submit-request-changes:    Submitting a Review.  (line  9)
+* code-review-submit-single-diff-comment-at-point: The Review Buffer.
+                                                               (line 26)
+* code-review-submit-single-top-level-comment: Submitting a Review.
+                                                               (line 27)
+* code-review-toggle-display-all-comments: The Review Buffer.  (line 61)
+* code-review-toggle-display-diff-comments: The Review Buffer. (line 61)
+* code-review-toggle-display-top-level-comments: The Review Buffer.
+                                                               (line 61)
+* code-review-transient-api:             The Review Buffer.    (line 26)
+* code-review-visit-file-at-point:       The Review Buffer.    (line 26)
+* code-review-visit-file-at-point <1>:   Visiting Files.       (line  6)
+
+
+File: code-review.info,  Node: Key Index,  Next: Variable Index,  Prev: Command and Function Index,  Up: Top
+
+Appendix B Key Index
+********************
+
+ [index ]
+* Menu:
+
+* b:                                     The Review Buffer.    (line 70)
+* C-c @:                                 Comments and Replies. (line  6)
+* C-c C-c:                               Comments and Replies. (line  6)
+* C-c C-k:                               Comments and Replies. (line  6)
+* C-c C-s:                               The Review Buffer.    (line 26)
+* C-c C-v:                               Visiting Files.       (line 14)
+* C-c RET:                               The Review Buffer.    (line 26)
+* C-RET:                                 The Review Buffer.    (line 26)
+* C-RET <1>:                             Visiting Files.       (line  6)
+* G:                                     The Review Buffer.    (line 26)
+* r:                                     The Review Buffer.    (line 26)
+* r a:                                   Submitting a Review.  (line  9)
+* r c:                                   Submitting a Review.  (line  9)
+* r C-c C-r:                             Saving and Resuming Reviews.
+                                                               (line  6)
+* r C-c C-s:                             Saving and Resuming Reviews.
+                                                               (line  6)
+* r l:                                   Submitting a Review.  (line 27)
+* r m m:                                 Merging.              (line  6)
+* r m r:                                 Merging.              (line  6)
+* r m s:                                 Merging.              (line  6)
+* r p:                                   Submitting a Review.  (line 27)
+* r r:                                   Submitting a Review.  (line  9)
+* r s a:                                 Editing the Pull Request.
+                                                               (line  9)
+* r s c:                                 Submitting a Review.  (line 27)
+* r s C:                                 Submitting a Review.  (line 27)
+* r s d:                                 Editing the Pull Request.
+                                                               (line  9)
+* r s f:                                 Submitting a Review.  (line 20)
+* r s l:                                 Editing the Pull Request.
+                                                               (line  9)
+* r s m:                                 Editing the Pull Request.
+                                                               (line  9)
+* r s r:                                 Editing the Pull Request.
+                                                               (line  9)
+* r s t:                                 Editing the Pull Request.
+                                                               (line  9)
+* r s y:                                 Editing the Pull Request.
+                                                               (line  9)
+* RET:                                   The Review Buffer.    (line 26)
+
+
+File: code-review.info,  Node: Variable Index,  Prev: Key Index,  Up: Top
+
+Appendix C Variable Index
+*************************
+
+ [index ]
+* Menu:
+
+* code-review-always-restrict-approval?: Submitting a Review.  (line 43)
+* code-review-always-restrict-approval? <1>: Options.          (line 34)
+* code-review-auth-login-marker:         Gitlab Authentication.
+                                                               (line  6)
+* code-review-auth-login-marker <1>:     Options.              (line  9)
+* code-review-buffer-name:               Options.              (line 20)
+* code-review-code-comment-section-map:  Reactions.            (line 12)
+* code-review-comment-buffer-msg:        Options.              (line 58)
+* code-review-comment-buffer-name:       Options.              (line 22)
+* code-review-comment-feedback-msg:      Options.              (line 59)
+* code-review-comment-section-map:       Reactions.            (line 12)
+* code-review-comment-single-comment-msg: Options.             (line 60)
+* code-review-comment-suggestion-msg:    Options.              (line 61)
+* code-review-commit-buffer-name:        Options.              (line 21)
+* code-review-db-database-file:          Saving and Resuming Reviews.
+                                                               (line 18)
+* code-review-db-database-file <1>:      Options.              (line 42)
+* code-review-description-section-map:   Reactions.            (line 12)
+* code-review-download-dir:              Visiting Files.       (line 14)
+* code-review-download-dir <1>:          Options.              (line 38)
+* code-review-fill-column:               Options.              (line 13)
+* code-review-github-base-url:           Github Enterprise.    (line 14)
+* code-review-github-graphql-host:       Github Enterprise.    (line 14)
+* code-review-github-host:               Github Enterprise.    (line 14)
+* code-review-gitlab-base-url:           Gitlab Instances.     (line 22)
+* code-review-gitlab-graphql-host:       Gitlab Instances.     (line 22)
+* code-review-gitlab-host:               Gitlab Instances.     (line 22)
+* code-review-headers-hook:              Options.              (line 51)
+* code-review-lgtm-message:              Submitting a Review.  (line 27)
+* code-review-lgtm-message <1>:          Options.              (line 31)
+* code-review-log-file:                  Options.              (line 45)
+* code-review-log-file <1>:              Troubleshooting.      (line  6)
+* code-review-log-raw-request-responses: Options.              (line 48)
+* code-review-log-raw-request-responses <1>: Troubleshooting.  (line  6)
+* code-review-new-buffer-window-strategy: Options.             (line 16)
+* code-review-section-image-scaling:     Options.              (line 28)
+* code-review-section-indent-width:      Options.              (line 25)
+* code-review-sections-commit-hook:      Options.              (line 53)
+* code-review-sections-hook:             Options.              (line 52)
+* ghub-insecure-hosts:                   Gitlab Instances.     (line 32)
+
+
+
+Tag Table:
+Node: Top897
+Node: Introduction2664
+Node: Installation4498
+Node: Getting Started5772
+Node: The Review Buffer6870
+Node: Comments and Replies9590
+Node: Submitting a Review10663
+Node: Editing the Pull Request12231
+Node: Reactions13320
+Node: Merging14139
+Node: Saving and Resuming Reviews14667
+Node: Visiting Files15343
+Node: Forge Support16119
+Node: Gitlab17732
+Node: Gitlab Authentication17922
+Node: Gitlab Instances18573
+Node: Approving on Gitlab20093
+Node: Github20611
+Node: Github Authentication20831
+Node: Github Enterprise21515
+Node: Customization23208
+Node: Options23405
+Node: Key Binding Suggestions25792
+Node: Doom Emacs27042
+Node: Troubleshooting27384
+Node: Extending Code Review28290
+Node: Acknowledgments28698
+Node: Command and Function Index29077
+Node: Key Index33305
+Node: Variable Index36427
+
+End Tag Table
+
+
+Local Variables:
+coding: utf-8
+End:
