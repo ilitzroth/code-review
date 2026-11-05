@@ -592,9 +592,46 @@ diff line or a file heading opens the file in your local clone of the
 repository, the worktree Forge knows for it, at the line at point.  When
 the clone is not at the pull request's head commit, it offers to check
 out the pull request's branch there, but only if the clone has no
-uncommitted changes.
-Then the code you read, and tools like Eglot, see the pull request's
-version.
+uncommitted changes.  Then the code you read, and tools like Eglot, see
+the pull request's version.
+
+@cindex worktree, per pull request
+@vindex code-review-worktree-function
+@findex code-review-checkout-in-clone
+@findex code-review-local-clone
+@findex code-review-pr-head
+Where the file is visited is up to @code{code-review-worktree-function}.
+It is called with the pull request and returns the directory to visit
+the file in.  The default, @code{code-review-checkout-in-clone}, is the
+behavior described above.  Checking out in your clone gets in the way
+of your own work, so you may prefer a function that checks the pull
+request out in a @code{git worktree} of its own and sets up what you
+need there: a virtual environment, a devcontainer, a language server.
+Such a function can use @code{code-review-local-clone}, which returns
+the clone Forge knows, and @code{code-review-pr-head}, which returns the
+pull request's head commit.  The pull request object also has the
+@code{owner}, @code{repo} and @code{number} slots; Gitlab merge requests
+are at @code{refs/merge-requests/@var{n}/head} on the forge, Github pull
+requests at @code{refs/pull/@var{n}/head}.  For example:
+
+@lisp
+(defun my-review-worktree (pr)
+  "Check PR out in a worktree of its own, next to the clone."
+  (let* ((clone (code-review-local-clone pr))
+         (tree (expand-file-name
+                (format "../%s-review-%s" (oref pr repo) (oref pr number))
+                clone)))
+    (unless (file-directory-p tree)
+      (let ((default-directory clone))
+        (call-process "git" nil nil nil "fetch" "origin"
+                      (format "refs/merge-requests/%s/head"
+                              (oref pr number)))
+        (call-process "git" nil nil nil "worktree" "add" "--detach"
+                      tree (code-review-pr-head pr))))
+    tree))
+
+(setq code-review-worktree-function #'my-review-worktree)
+@end lisp
 
 @cindex binary files
 @vindex code-review-download-dir
@@ -838,6 +875,11 @@ The column at which comments are wrapped; default 80.
 @item code-review-new-buffer-window-strategy
 The function that shows a new review buffer; default
 @code{switch-to-buffer-other-window}.
+
+@item code-review-worktree-function
+The function returning the directory in which to visit a pull request's
+files; default @code{code-review-checkout-in-clone}.  @xref{Visiting
+Files}.
 
 @item code-review-buffer-name
 @itemx code-review-commit-buffer-name

@@ -470,6 +470,36 @@ request's branch there, but only if the clone has no uncommitted
 changes.  Then the code you read, and tools like Eglot, see the pull
 request's version.
 
+   Where the file is visited is up to ‘code-review-worktree-function’.
+It is called with the pull request and returns the directory to visit
+the file in.  The default, ‘code-review-checkout-in-clone’, is the
+behavior described above.  Checking out in your clone gets in the way of
+your own work, so you may prefer a function that checks the pull request
+out in a ‘git worktree’ of its own and sets up what you need there: a
+virtual environment, a devcontainer, a language server.  Such a function
+can use ‘code-review-local-clone’, which returns the clone Forge knows,
+and ‘code-review-pr-head’, which returns the pull request's head commit.
+The pull request object also has the ‘owner’, ‘repo’ and ‘number’ slots;
+Gitlab merge requests are at ‘refs/merge-requests/N/head’ on the forge,
+Github pull requests at ‘refs/pull/N/head’.  For example:
+
+     (defun my-review-worktree (pr)
+       "Check PR out in a worktree of its own, next to the clone."
+       (let* ((clone (code-review-local-clone pr))
+              (tree (expand-file-name
+                     (format "../%s-review-%s" (oref pr repo) (oref pr number))
+                     clone)))
+         (unless (file-directory-p tree)
+           (let ((default-directory clone))
+             (call-process "git" nil nil nil "fetch" "origin"
+                           (format "refs/merge-requests/%s/head"
+                                   (oref pr number)))
+             (call-process "git" nil nil nil "worktree" "add" "--detach"
+                           tree (code-review-pr-head pr))))
+         tree))
+
+     (setq code-review-worktree-function #'my-review-worktree)
+
    ‘RET’ on a binary file, such as an image, downloads it to
 ‘code-review-download-dir’ and opens that directory in Dired.  ‘C-c C-v’
 opens the file on the forge instead.
@@ -692,6 +722,11 @@ subgroups ‘code-review-github’ and ‘code-review-gitlab’.
      The function that shows a new review buffer; default
      ‘switch-to-buffer-other-window’.
 
+‘code-review-worktree-function’
+     The function returning the directory in which to visit a pull
+     request's files; default ‘code-review-checkout-in-clone’.  *Note
+     Visiting Files::.
+
 ‘code-review-buffer-name’
 ‘code-review-commit-buffer-name’
 ‘code-review-comment-buffer-name’
@@ -857,6 +892,7 @@ Appendix A Command and Function Index
  [index ]
 * Menu:
 
+* code-review-checkout-in-clone:         Visiting Files.       (line 14)
 * code-review-code-comment-reaction-at-point: Reactions.       (line 12)
 * code-review-comment-add-or-edit:       The Review Buffer.    (line 33)
 * code-review-comment-code-suggestion:   The Review Buffer.    (line 33)
@@ -871,11 +907,13 @@ Appendix A Command and Function Index
 * code-review-forge-pr-at-point:         Getting Started.      (line  6)
 * code-review-input-mention-user-at-point: Comments and Replies.
                                                                (line  6)
+* code-review-local-clone:               Visiting Files.       (line 14)
 * code-review-merge-merge:               Merging.              (line  6)
 * code-review-merge-rebase:              Merging.              (line  6)
 * code-review-merge-squash:              Merging.              (line  6)
 * code-review-open-unfinished-review:    Saving and Resuming Reviews.
                                                                (line  6)
+* code-review-pr-head:                   Visiting Files.       (line 14)
 * code-review-recover-unfinished-review: Saving and Resuming Reviews.
                                                                (line  6)
 * code-review-reload:                    The Review Buffer.    (line 33)
@@ -930,7 +968,7 @@ Appendix B Key Index
 * C-c C-c:                               Comments and Replies. (line  6)
 * C-c C-k:                               Comments and Replies. (line  6)
 * C-c C-s:                               The Review Buffer.    (line 33)
-* C-c C-v:                               Visiting Files.       (line 14)
+* C-c C-v:                               Visiting Files.       (line 44)
 * C-c RET:                               The Review Buffer.    (line 33)
 * C-RET:                                 The Review Buffer.    (line 33)
 * C-RET <1>:                             Visiting Files.       (line  6)
@@ -980,25 +1018,25 @@ Appendix C Variable Index
 * Menu:
 
 * code-review-always-restrict-approval?: Submitting a Review.  (line 43)
-* code-review-always-restrict-approval? <1>: Options.          (line 36)
+* code-review-always-restrict-approval? <1>: Options.          (line 41)
 * code-review-auth-login-marker:         Gitlab Authentication.
                                                                (line  6)
 * code-review-auth-login-marker <1>:     Options.              (line  9)
-* code-review-buffer-name:               Options.              (line 20)
+* code-review-buffer-name:               Options.              (line 25)
 * code-review-code-comment-section-map:  Reactions.            (line 12)
-* code-review-comment-buffer-msg:        Options.              (line 60)
-* code-review-comment-buffer-name:       Options.              (line 22)
-* code-review-comment-feedback-msg:      Options.              (line 61)
+* code-review-comment-buffer-msg:        Options.              (line 65)
+* code-review-comment-buffer-name:       Options.              (line 27)
+* code-review-comment-feedback-msg:      Options.              (line 66)
 * code-review-comment-section-map:       Reactions.            (line 12)
-* code-review-comment-single-comment-msg: Options.             (line 62)
-* code-review-comment-suggestion-msg:    Options.              (line 63)
-* code-review-commit-buffer-name:        Options.              (line 21)
+* code-review-comment-single-comment-msg: Options.             (line 67)
+* code-review-comment-suggestion-msg:    Options.              (line 68)
+* code-review-commit-buffer-name:        Options.              (line 26)
 * code-review-db-database-file:          Saving and Resuming Reviews.
                                                                (line 18)
-* code-review-db-database-file <1>:      Options.              (line 44)
+* code-review-db-database-file <1>:      Options.              (line 49)
 * code-review-description-section-map:   Reactions.            (line 12)
-* code-review-download-dir:              Visiting Files.       (line 14)
-* code-review-download-dir <1>:          Options.              (line 40)
+* code-review-download-dir:              Visiting Files.       (line 44)
+* code-review-download-dir <1>:          Options.              (line 45)
 * code-review-fill-column:               Options.              (line 13)
 * code-review-github-base-url:           Github Enterprise.    (line 14)
 * code-review-github-graphql-host:       Github Enterprise.    (line 14)
@@ -1006,18 +1044,20 @@ Appendix C Variable Index
 * code-review-gitlab-base-url:           Gitlab Instances.     (line 22)
 * code-review-gitlab-graphql-host:       Gitlab Instances.     (line 22)
 * code-review-gitlab-host:               Gitlab Instances.     (line 22)
-* code-review-headers-hook:              Options.              (line 53)
+* code-review-headers-hook:              Options.              (line 58)
 * code-review-lgtm-message:              Submitting a Review.  (line 27)
-* code-review-lgtm-message <1>:          Options.              (line 33)
-* code-review-log-file:                  Options.              (line 47)
+* code-review-lgtm-message <1>:          Options.              (line 38)
+* code-review-log-file:                  Options.              (line 52)
 * code-review-log-file <1>:              Troubleshooting.      (line  6)
-* code-review-log-raw-request-responses: Options.              (line 50)
+* code-review-log-raw-request-responses: Options.              (line 55)
 * code-review-log-raw-request-responses <1>: Troubleshooting.  (line  6)
 * code-review-new-buffer-window-strategy: Options.             (line 16)
-* code-review-section-image-scaling:     Options.              (line 30)
-* code-review-section-indent-width:      Options.              (line 27)
-* code-review-sections-commit-hook:      Options.              (line 55)
-* code-review-sections-hook:             Options.              (line 54)
+* code-review-section-image-scaling:     Options.              (line 35)
+* code-review-section-indent-width:      Options.              (line 32)
+* code-review-sections-commit-hook:      Options.              (line 60)
+* code-review-sections-hook:             Options.              (line 59)
+* code-review-worktree-function:         Visiting Files.       (line 14)
+* code-review-worktree-function <1>:     Options.              (line 20)
 * ghub-insecure-hosts:                   Gitlab Instances.     (line 32)
 
 
@@ -1035,24 +1075,24 @@ Node: Reactions14300
 Node: Merging15119
 Node: Saving and Resuming Reviews15647
 Node: Visiting Files16323
-Node: Forge Support17112
-Node: Gitlab18725
-Node: Gitlab Authentication18915
-Node: Gitlab Instances19566
-Node: Approving on Gitlab21086
-Node: Github21604
-Node: Github Authentication21824
-Node: Github Enterprise22508
-Node: Customization24201
-Node: Options24398
-Node: Key Binding Suggestions26900
-Node: Doom Emacs28796
-Node: Troubleshooting29138
-Node: Extending Code Review30044
-Node: Acknowledgments30452
-Node: Command and Function Index30831
-Node: Key Index35059
-Node: Variable Index38539
+Node: Forge Support18780
+Node: Gitlab20393
+Node: Gitlab Authentication20583
+Node: Gitlab Instances21234
+Node: Approving on Gitlab22754
+Node: Github23272
+Node: Github Authentication23492
+Node: Github Enterprise24176
+Node: Customization25869
+Node: Options26066
+Node: Key Binding Suggestions28769
+Node: Doom Emacs30665
+Node: Troubleshooting31007
+Node: Extending Code Review31913
+Node: Acknowledgments32321
+Node: Command and Function Index32700
+Node: Key Index37147
+Node: Variable Index40627
 
 End Tag Table
 

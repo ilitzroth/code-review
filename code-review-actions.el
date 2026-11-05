@@ -784,6 +784,18 @@ If a valid ASSIGNEE is provided, use that instead."
                                                   (= name $s2))]
                                      owner name)))))
 
+(defun code-review-local-clone (pr)
+  "Return the directory of the local clone of PR's repository, or nil.
+The clone is the worktree Forge knows for the repository.  For
+`code-review-worktree-function' implementations."
+  (when-let* ((repo (code-review--local-repository pr)))
+    (oref repo worktree)))
+
+(defun code-review-pr-head (pr)
+  "Return the commit at the head of PR.
+For `code-review-worktree-function' implementations."
+  (code-review--pr-head-sha pr))
+
 (defun code-review--pr-head-sha (pr)
   "Return the commit at the head of PR."
   (let ((infos (oref pr raw-infos)))
@@ -822,21 +834,27 @@ return the last new-file line before it."
         (forward-line 1)))
     (max start (+ start count -1))))
 
-(defun code-review-visit-file-at-point ()
-  "Visit the file at point in the local clone of the PR's repository.
-The clone is the worktree Forge knows for the repository.  Point goes
-to the line at point in the diff (in the new version of the file).
-When the clone is not at the PR's head commit, offer to check out the
-PR's branch there (only if the clone has no uncommitted changes), or
-to visit the file as it is."
-  (interactive)
-  (let* ((pr (code-review-db-get-pullreq))
-         (file-section (or (code-review--file-section-at-point)
-                           (user-error "Not on a file or diff line")))
-         (path (string-remove-prefix "b/" (oref file-section value)))
-         (hunk (code-review--hunk-section-at-point))
-         (line (if hunk (code-review--new-file-line-at-point hunk) 1))
-         (repo (or (code-review--local-repository pr)
+(defcustom code-review-worktree-function #'code-review-checkout-in-clone
+  "Function returning the directory in which to visit a pull request's files.
+It is called with the pull request (a `code-review-db-pullreq') and
+returns a directory with the pull request's head checked out, or the
+files as they should be visited.  `code-review-visit-file-at-point'
+visits files relative to it.
+
+The default, `code-review-checkout-in-clone', uses the clone Forge
+knows and offers to check out the pull request there.  A function can
+instead create a separate worktree per pull request, and set up its
+build environment."
+  :group 'code-review
+  :type 'function)
+
+(defun code-review-checkout-in-clone (pr)
+  "Return the local clone of PR's repository, offering to check out PR.
+The clone is the worktree Forge knows for the repository.  When it is
+not at PR's head commit, offer to check out PR's branch there (only if
+the clone has no uncommitted changes), or to visit the files as they
+are."
+  (let* ((repo (or (code-review--local-repository pr)
                    (user-error "No local clone of %s known to Forge"
                                (code-review--pr-full-path pr))))
          (default-directory (oref repo worktree))
@@ -862,12 +880,29 @@ the repository's topics first (N f f in magit)")))
 PR's head commit yet; pull to update it")))
         (?v nil)
         (_ (user-error "Quit"))))
-    (let ((file (expand-file-name path default-directory)))
-      (unless (file-exists-p file)
-        (user-error "%s does not exist in the clone" path))
-      (pop-to-buffer (find-file-noselect file))
-      (goto-char (point-min))
-      (forward-line (1- line)))))
+    default-directory))
+
+(defun code-review-visit-file-at-point ()
+  "Visit the file at point in a checkout of the PR.
+The checkout is the directory `code-review-worktree-function' returns;
+by default the clone Forge knows, where the PR's branch can be checked
+out.  Point goes to the line at point in the diff (in the new version
+of the file)."
+  (interactive)
+  (let* ((pr (code-review-db-get-pullreq))
+         (file-section (or (code-review--file-section-at-point)
+                           (user-error "Not on a file or diff line")))
+         (path (string-remove-prefix "b/" (oref file-section value)))
+         (hunk (code-review--hunk-section-at-point))
+         (line (if hunk (code-review--new-file-line-at-point hunk) 1))
+         (dir (funcall code-review-worktree-function pr))
+         (file (expand-file-name path dir)))
+    (unless (file-exists-p file)
+      (user-error "%s does not exist in %s" path
+                  (abbreviate-file-name dir)))
+    (pop-to-buffer (find-file-noselect file))
+    (goto-char (point-min))
+    (forward-line (1- line))))
 
 (code-review-set-obsolete-fns)
 
